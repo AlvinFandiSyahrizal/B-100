@@ -193,4 +193,5 @@ export const SCENE = {
     GAME_OVER: 'GameOverScene',
     VICTORY:   'VictoryScene',
     META:      'MetaScene',
+    NODE_MAP: 'NodeMapScene',
 };

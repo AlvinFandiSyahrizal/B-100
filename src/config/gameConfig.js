@@ -10,6 +10,7 @@ import { PreloadScene }         from '../scenes/PreloadScene.js';
 import { MainMenuScene }        from '../scenes/MainMenuScene.js';
 import { CombatScene }          from '../scenes/CombatScene.js';
 import { GameOverScene }        from '../scenes/GameOverScene.js';
+import { NodeMapScene } from '../scenes/NodeMapScene.js';
 
 // Nanti scene lain ditambahkan di sini sesuai phase
 
@@ -40,6 +41,7 @@ export const gameConfig = {
         BootScene,
         PreloadScene,
         MainMenuScene,
+        NodeMapScene,
         CombatScene,
         GameOverScene,
         // Phase 2 nanti tambah:
