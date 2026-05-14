@@ -28,6 +28,11 @@ export class RewardScene extends Phaser.Scene {
     }
 
     create() {
+        // Tambah gold ke playerData sebelum tampil UI
+        if (this.loot?.gold && this.playerData) {
+            this.playerData.gold = (this.playerData.gold || 0) + this.loot.gold;
+        }
+
         this._buildBackground();
         this._buildTitle();
         this._buildGoldReward();
@@ -194,10 +199,26 @@ export class RewardScene extends Phaser.Scene {
     // ── Actions ───────────────────────────────────────────────
 
     _pickCard(card) {
-        // Tambah ke deck player
-        // Phase 2: playerData masih null, nanti dikoneksi di Step 6
+        // Tambah kartu ke deck player
+        if (this.playerData) {
+            this.playerData.discard = this.playerData.discard || [];
+            this.playerData.discard.push({ ...card });
+        }
         console.log(`[Reward] Picked card: ${card.name}`);
         this._goBack();
+    }
+
+    create() {
+        // Tambah gold ke playerData sebelum tampil UI
+        if (this.loot?.gold && this.playerData) {
+            this.playerData.gold = (this.playerData.gold || 0) + this.loot.gold;
+        }
+
+        this._buildBackground();
+        this._buildTitle();
+        this._buildGoldReward();
+        this._buildCardChoices();
+        this._buildSkipButton();
     }
 
     _goBack() {

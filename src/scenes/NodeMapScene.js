@@ -3,11 +3,9 @@
 // Player pilih node mana yang mau dilalui sebelum masuk combat
 // ============================================================
 
-import {
-    SCENE, GAME_WIDTH, GAME_HEIGHT,
-    NODE_TYPE
-} from '../config/constants.js';
+import { SCENE, GAME_WIDTH, GAME_HEIGHT, NODE_TYPE } from '../config/constants.js';
 import { NodeMapGenerator } from '../systems/NodeMapGenerator.js';
+import { SaveSystem }       from '../storage/SaveSystem.js';
 
 // Posisi canvas untuk area peta
 const MAP_START_X = 120;
@@ -61,10 +59,44 @@ export class NodeMapScene extends Phaser.Scene {
     }
 
     create() {
+        // Rebuild selalu saat scene dibuat ulang
+        // (Phaser destroy semua object saat scene di-stop)
         this._buildBackground();
         this._buildZoneInfo();
         this._buildMap();
         this._buildLegend();
+
+        // Tampilkan notif zona baru kalau baru masuk zona ini
+        if (this.currentNodeId === 'start') {
+            this._showZoneEntryNotif();
+        }
+    }
+
+    _showZoneEntryNotif() {
+        const txt = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, `ZONA ${this.zone}`, {
+            fontFamily: 'monospace',
+            fontSize:   '48px',
+            fontStyle:  'bold',
+            color:      '#cc8833',
+            alpha:      0,
+        }).setOrigin(0.5).setDepth(20);
+
+        this.tweens.add({
+            targets:  txt,
+            alpha:    { from: 0, to: 1 },
+            y:        { from: GAME_HEIGHT / 2 + 20, to: GAME_HEIGHT / 2 },
+            duration: 400,
+            onComplete: () => {
+                this.time.delayedCall(800, () => {
+                    this.tweens.add({
+                        targets:  txt,
+                        alpha:    0,
+                        duration: 400,
+                        onComplete: () => txt.destroy(),
+                    });
+                });
+            },
+        });
     }
 
     // ── Background ────────────────────────────────────────────
@@ -345,6 +377,9 @@ export class NodeMapScene extends Phaser.Scene {
             currentNodeId: this.currentNodeId,
             returnScene:   SCENE.NODE_MAP,
         };
+
+        // Auto-save setiap masuk node
+        SaveSystem.autoSave(sceneData);
 
         switch (node.type) {
             case NODE_TYPE.COMBAT:

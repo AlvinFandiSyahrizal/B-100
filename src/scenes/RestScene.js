@@ -159,20 +159,85 @@ export class RestScene extends Phaser.Scene {
 
     _doHeal(amount) {
         this.actionTaken = true;
-        console.log(`[Rest] Heal ${amount} HP`);
-        // Phase 2 Step 6: player.heal(amount)
 
-        this._showFeedback('❤️  HP dipulihkan!', '#cc4444');
+        if (this.playerData) {
+            const hpMax     = this.playerData.stats?.hp_max || 100;
+            const healAmt   = typeof amount === 'number' ? amount : Math.floor(hpMax * 0.3);
+            this.playerData.hp = Math.min(hpMax, (this.playerData.hp || 0) + healAmt);
+            console.log(`[Rest] Healed ${healAmt} HP. Now: ${this.playerData.hp}/${hpMax}`);
+        }
+
+        this._showFeedback('❤️  HP dipulihkan!', '#44cc44');
         this.time.delayedCall(1200, () => this._leave());
     }
 
     _doUpgrade() {
         this.actionTaken = true;
-        console.log('[Rest] Upgrade card — belum dikoneksi ke player');
-        // Phase 2 Step 6: tampilkan list deck, player pilih 1 kartu untuk di-upgrade
 
-        this._showFeedback('⬆️  Kartu diupgrade!', '#4488cc');
-        this.time.delayedCall(1200, () => this._leave());
+        // Tampilkan list kartu di deck untuk dipilih
+        if (this.playerData) {
+            const allCards = [
+                ...(this.playerData.deck    || []),
+                ...(this.playerData.discard || []),
+            ].filter(c => c.upgradedId);  // hanya kartu yang punya versi upgrade
+
+            if (allCards.length === 0) {
+                this._showFeedback('Tidak ada kartu yang bisa diupgrade.', '#cc4444');
+                this.time.delayedCall(1200, () => this._leave());
+                return;
+            }
+
+            this._showUpgradePicker(allCards);
+        } else {
+            this._showFeedback('⬆️  Kartu diupgrade!', '#4488cc');
+            this.time.delayedCall(1200, () => this._leave());
+        }
+    }
+
+    _showUpgradePicker(cards) {
+        // Panel pilih kartu
+        const panelY = GAME_HEIGHT / 2 + 130;
+
+        this.add.text(GAME_WIDTH / 2, panelY - 30, 'Pilih kartu yang mau di-upgrade:', {
+            fontFamily: 'monospace', fontSize: '13px', color: '#667788',
+        }).setOrigin(0.5);
+
+        const maxShow = Math.min(cards.length, 5);
+        const spacing = 160;
+        const startX  = GAME_WIDTH / 2 - ((maxShow - 1) * spacing) / 2;
+
+        cards.slice(0, maxShow).forEach((card, i) => {
+            const x  = startX + i * spacing;
+            const bg = this.add.rectangle(x, panelY + 30, 140, 50, 0x111122)
+                .setStrokeStyle(1, 0x334455)
+                .setInteractive({ useHandCursor: true });
+
+            this.add.text(x, panelY + 22, card.name, {
+                fontFamily: 'monospace', fontSize: '10px', color: '#aabbcc',
+                align: 'center', wordWrap: { width: 130 },
+            }).setOrigin(0.5);
+
+            this.add.text(x, panelY + 40, `→ ${card.upgradedId?.replace(/_/g, ' ')}`, {
+                fontFamily: 'monospace', fontSize: '9px', color: '#44aa44',
+            }).setOrigin(0.5);
+
+            bg.on('pointerover', () => bg.setFillStyle(0x1a1a33));
+            bg.on('pointerout',  () => bg.setFillStyle(0x111122));
+            bg.on('pointerdown', () => {
+                // Upgrade kartu di playerData
+                const inDeck = this.playerData.deck?.findIndex(c => c.id === card.id);
+                if (inDeck !== undefined && inDeck >= 0 && card.upgradedId) {
+                    this.playerData.deck[inDeck] = { ...card, id: card.upgradedId };
+                } else {
+                    const inDiscard = this.playerData.discard?.findIndex(c => c.id === card.id);
+                    if (inDiscard >= 0 && card.upgradedId) {
+                        this.playerData.discard[inDiscard] = { ...card, id: card.upgradedId };
+                    }
+                }
+                this._showFeedback(`⬆️  ${card.name} diupgrade!`, '#4488cc');
+                this.time.delayedCall(1000, () => this._leave());
+            });
+        });
     }
 
     _showFeedback(msg, color) {

@@ -10,6 +10,20 @@ const SAVE_VERSION = '0.1.0';
 
 export class SaveSystem {
 
+    /** Auto-save dipanggil setiap kali pindah scene. */
+    static autoSave(sceneData) {
+        const runData = {
+            zone:          sceneData.zone          || 1,
+            floor:         sceneData.floor         || 1,
+            curseLevel:    sceneData.curseLevel    || 1,
+            playerData:    sceneData.playerData    || null,
+            mapData:       sceneData.mapData       || null,
+            currentNodeId: sceneData.currentNodeId || 'start',
+            savedAt:       Date.now(),
+        };
+        this.saveRun(runData);
+    }
+
     /** Simpan state run saat ini. */
     static saveRun(runData) {
         try {
