@@ -194,5 +194,7 @@ export const SCENE = {
     VICTORY:   'VictoryScene',
     META:      'MetaScene',
     NODE_MAP: 'NodeMapScene',
+    BOSS_INTRO: 'BossIntroScene',
+    VICTORY:    'VictoryScene',
     
 };

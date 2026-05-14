@@ -371,7 +371,7 @@ export class NodeMapScene extends Phaser.Scene {
                 break;
 
             case NODE_TYPE.BOSS:
-                this.scene.start(SCENE.COMBAT, { ...sceneData, isBoss: true });
+                this.scene.start(SCENE.BOSS_INTRO, sceneData);
                 break;
 
             default:

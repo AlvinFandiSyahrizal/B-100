@@ -201,6 +201,35 @@ export class RewardScene extends Phaser.Scene {
     }
 
     _goBack() {
+        const nextFloor = this.floor + 1;
+        const nextZone  = Math.ceil(nextFloor / 10);
+        const isBossFloor = this.floor % 10 === 0;
+
+        // Kalau baru saja kalahkan boss B100, pergi ke VictoryScene
+        if (this.floor >= 100) {
+            this.scene.start(SCENE.VICTORY, {
+                floor:      this.floor,
+                curseLevel: this.curseLevel,
+                playerData: this.playerData,
+            });
+            return;
+        }
+
+        // Kalau baru saja kalahkan boss zona (B10, B20, dst),
+        // generate map zona baru
+        if (isBossFloor) {
+            this.scene.start(SCENE.NODE_MAP, {
+                zone:          nextZone,
+                floor:         nextFloor,
+                curseLevel:    this.curseLevel,
+                playerData:    this.playerData,
+                mapData:       null,           // null = generate map baru
+                currentNodeId: 'start',
+            });
+            return;
+        }
+
+        // Combat biasa — kembali ke map yang sama
         this.scene.start(SCENE.NODE_MAP, {
             zone:          this.zone,
             floor:         this.floor,
