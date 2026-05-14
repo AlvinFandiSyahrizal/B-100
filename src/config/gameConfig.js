@@ -16,6 +16,7 @@ import { ShopScene }            from '../scenes/ShopScene.js';
 import { RestScene }            from '../scenes/RestScene.js';
 import { BossIntroScene }       from '../scenes/BossIntroScene.js';
 import { VictoryScene }         from '../scenes/VictoryScene.js';
+import { EventScene }           from '../scenes/EventScene.js';
 
 // Nanti scene lain ditambahkan di sini sesuai phase
 
@@ -54,6 +55,7 @@ export const gameConfig = {
         BossIntroScene,
         VictoryScene,
         GameOverScene,
+        EventScene,
         // Phase 2 nanti tambah:
         // NodeMapScene, EventScene, ShopScene, RestScene,
         // BossIntroScene, RewardScene,

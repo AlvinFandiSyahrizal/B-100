@@ -396,8 +396,7 @@ export class NodeMapScene extends Phaser.Scene {
                 break;
 
             case NODE_TYPE.EVENT:
-                // Phase 3+
-                console.log('Event — belum diimplementasi');
+                this.scene.start(SCENE.EVENT, sceneData);
                 break;
 
             case NODE_TYPE.TREASURE:

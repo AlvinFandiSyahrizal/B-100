@@ -1,19 +1,20 @@
 // ============================================================
 // CombatScene.js — layar pertarungan utama
-// Phase 1: functional, UI masih sederhana (placeholder)
+// Flow baru: pilih kartu → queue → SERANG / END TURN
+// Fix: kartu tidak muncul di elite, tooltip detail kartu (hold)
 // ============================================================
 
 import {
     SCENE, GAME_WIDTH, GAME_HEIGHT,
-    ENERGY_PER_TURN, HAND_SIZE, STAT
+    ENERGY_PER_TURN, STAT
 } from '../config/constants.js';
-import { Player }        from '../entities/Player.js';
-import { Monster }       from '../entities/Monster.js';
-import { CombatSystem, COMBAT_STATE } from '../systems/CombatSystem.js';
-import { DeckSystem }    from '../systems/DeckSystem.js';
+import { Player }                         from '../entities/Player.js';
+import { Monster }                        from '../entities/Monster.js';
+import { CombatSystem, COMBAT_STATE }     from '../systems/CombatSystem.js';
+import { DeckSystem }                     from '../systems/DeckSystem.js';
 import { getMonster, getZoneMonsterPool } from '../data/monsters/index.js';
-import { STARTER_DECK }                  from '../data/cards/index.js';
-import { LootSystem }                    from '../systems/LootSystem.js';
+import { STARTER_DECK }                   from '../data/cards/index.js';
+import { LootSystem }                     from '../systems/LootSystem.js';
 
 export class CombatScene extends Phaser.Scene {
     constructor() {
@@ -25,10 +26,10 @@ export class CombatScene extends Phaser.Scene {
         this.curseLevel    = data.curseLevel    || 1;
         this.zone          = data.zone          || Math.ceil(this.floor / 10);
         this.isBoss        = data.isBoss        || false;
+        this.isElite       = data.isElite       || false;
         this.mapData       = data.mapData       || null;
         this.currentNodeId = data.currentNodeId || 'start';
 
-        // Restore player dari data kalau ada, buat baru kalau tidak
         if (data.playerData) {
             this.player = Player.fromJSON(data.playerData);
         } else {
@@ -37,372 +38,553 @@ export class CombatScene extends Phaser.Scene {
                 DeckSystem.buildDeckFromIds(STARTER_DECK)
             );
         }
+
+        // Queue kartu yang sudah dipilih tapi belum dieksekusi
+        this.selectedQueue   = [];
+        this.queueEnergyCost = 0;
     }
 
     create() {
-        // Spawn monster sesuai zona
+        // Spawn monster — fix bug: pastikan selalu ada monster valid
         const pool        = getZoneMonsterPool(this.zone);
         const monsterId   = pool[Math.floor(Math.random() * pool.length)];
         const monsterData = getMonster(monsterId) || getMonster('kappa');
-        this.monsters     = [ new Monster(monsterData, this.floor) ];
 
-        // ── Combat engine ─────────────────────────────────────
+        if (!monsterData) {
+            console.error('[CombatScene] Monster data tidak ditemukan! Fallback ke kappa.');
+        }
+
+        this.monsters = [ new Monster(monsterData || { id:'fallback', name:'Yokai', baseHP:30,
+            spriteKey:'monster_basic', stats:{}, attackPattern:[
+                { type:'attack', damage:6, damageType:'physical', intent:'attack' }
+            ], lootTable:{ gold:[5,10] } }, this.floor) ];
+
         this.combat = new CombatSystem(this.player, this.monsters);
         this.combat.start();
 
-        // ── Build UI ──────────────────────────────────────────
+        // Build UI — urutan penting
         this._buildBackground();
         this._buildMonsterArea();
         this._buildPlayerArea();
-        this._buildHandArea();
+        this._buildQueueArea();
         this._buildHUD();
+        this._buildActionButtons();
+        this._buildTooltip();
 
-        // ── Refresh UI ────────────────────────────────────────
+        // Render hand SETELAH semua UI siap
+        this.cardObjects = [];
         this._refreshUI();
-
-        // ── Input: End Turn ───────────────────────────────────
-        this._createEndTurnButton();
+        this._renderHand();
     }
 
-    // ── Build UI ──────────────────────────────────────────────
+    // ── Background ────────────────────────────────────────────
 
     _buildBackground() {
-        // Background gelap
         this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x080810);
 
-        // Garis-garis horisontal tipis
         const g = this.add.graphics();
-        g.lineStyle(1, 0x111122, 0.5);
+        g.lineStyle(1, 0x111122, 0.4);
         for (let y = 0; y < GAME_HEIGHT; y += 32) {
             g.moveTo(0, y); g.lineTo(GAME_WIDTH, y);
         }
         g.strokePath();
 
-        // Label lantai
-        this.add.text(GAME_WIDTH / 2, 20, `B${this.floor}  —  Zona ${this.zone}`, {
-            fontFamily: 'monospace',
-            fontSize:   '14px',
-            color:      '#444466',
+        const label = `B${this.floor}  —  Zona ${this.zone}` +
+            (this.isBoss  ? '  ⚠ BOSS'  : '') +
+            (this.isElite ? '  ⚡ ELITE' : '');
+
+        this.add.text(GAME_WIDTH / 2, 20, label, {
+            fontFamily: 'monospace', fontSize: '13px',
+            color: this.isBoss ? '#cc4433' : this.isElite ? '#cc8833' : '#333355',
         }).setOrigin(0.5, 0);
     }
 
-    _buildMonsterArea() {
-        // Area tengah atas untuk monster
-        this.monsterSprites = [];
-        this.monsterHpBars  = [];
-        this.monsterHpTexts = [];
-        this.monsterNameTexts = [];
-        this.monsterIntentIcons = [];
+    // ── Monster Area ──────────────────────────────────────────
 
-        const startX = GAME_WIDTH / 2 - (this.monsters.length - 1) * 120;
+    _buildMonsterArea() {
+        this.monsterSprites      = [];
+        this.monsterHpBars       = [];
+        this.monsterHpTexts      = [];
+        this.monsterIntentIcons  = [];
+        this.monsterIntentLabels = [];
+
+        const startX = GAME_WIDTH / 2;
 
         this.monsters.forEach((monster, i) => {
-            const x = startX + i * 240;
-            const y = 240;
+            const x = startX + (i - (this.monsters.length - 1) / 2) * 240;
+            const y = 220;
 
-            // Sprite placeholder
-            const spr = this.add.image(x, y, monster.spriteKey)
-                .setScale(3)
-                .setOrigin(0.5);
+            const spr = this.add.image(x, y, 'monster_basic').setScale(3).setOrigin(0.5);
             this.monsterSprites.push(spr);
 
-            // HP bar background
-            this.add.rectangle(x, y + 80, 120, 14, 0x220000).setOrigin(0.5);
-            // HP bar fill
-            const bar = this.add.rectangle(x - 59, y + 80, 118, 12, 0xcc2222).setOrigin(0, 0.5);
+            // HP bar
+            this.add.rectangle(x, y + 85, 130, 14, 0x1a0000).setOrigin(0.5);
+            const bar = this.add.rectangle(x - 64, y + 85, 128, 12, 0xcc2222).setOrigin(0, 0.5);
             this.monsterHpBars.push(bar);
 
-            // HP text
-            const hpTxt = this.add.text(x, y + 80, '', {
-                fontFamily: 'monospace', fontSize: '11px', color: '#ffffff',
+            const hpTxt = this.add.text(x, y + 85, '', {
+                fontFamily: 'monospace', fontSize: '10px', color: '#ffffff',
             }).setOrigin(0.5);
             this.monsterHpTexts.push(hpTxt);
 
-            // Name
-            const nameTxt = this.add.text(x, y + 95, monster.name, {
-                fontFamily: 'monospace', fontSize: '13px', color: '#cc8833',
+            this.add.text(x, y + 100, monster.name, {
+                fontFamily: 'monospace', fontSize: '12px', color: '#cc8833',
             }).setOrigin(0.5);
-            this.monsterNameTexts.push(nameTxt);
 
-            // Intent icon
-            const intentTxt = this.add.text(x, y - 80, '', {
-                fontFamily: 'monospace', fontSize: '22px', color: '#ffffff',
+            // Intent
+            const intentIcon = this.add.text(x, y - 90, '', {
+                fontFamily: 'monospace', fontSize: '22px',
             }).setOrigin(0.5);
-            this.monsterIntentIcons.push(intentTxt);
+            this.monsterIntentIcons.push(intentIcon);
+
+            const intentLabel = this.add.text(x, y - 65, '', {
+                fontFamily: 'monospace', fontSize: '10px', color: '#556677',
+            }).setOrigin(0.5);
+            this.monsterIntentLabels.push(intentLabel);
         });
     }
 
+    // ── Player Area ───────────────────────────────────────────
+
     _buildPlayerArea() {
-        // HP bar player (bawah kiri)
-        const px = 180, py = GAME_HEIGHT - 180;
+        const px = 155, py = GAME_HEIGHT - 210;
 
-        this.add.text(px, py - 50, 'PLAYER', {
-            fontFamily: 'monospace', fontSize: '12px', color: '#6666aa',
+        this.add.image(px, py - 95, 'player').setScale(3).setOrigin(0.5);
+
+        this.add.text(px, py - 55, 'PLAYER', {
+            fontFamily: 'monospace', fontSize: '10px', color: '#333355',
         }).setOrigin(0.5);
 
-        // HP bar bg
-        this.add.rectangle(px, py - 30, 200, 18, 0x220000).setOrigin(0.5);
-        this.playerHpBar = this.add.rectangle(px - 99, py - 30, 198, 16, 0x44cc44).setOrigin(0, 0.5);
-        this.playerHpText = this.add.text(px, py - 30, '', {
-            fontFamily: 'monospace', fontSize: '11px', color: '#ffffff',
+        this.add.rectangle(px, py - 38, 200, 14, 0x1a0000).setOrigin(0.5);
+        this.playerHpBar  = this.add.rectangle(px - 99, py - 38, 198, 12, 0x44cc44).setOrigin(0, 0.5);
+        this.playerHpText = this.add.text(px, py - 38, '', {
+            fontFamily: 'monospace', fontSize: '10px', color: '#ffffff',
         }).setOrigin(0.5);
 
-        // Block
-        this.playerBlockText = this.add.text(px, py - 8, '', {
+        this.playerBlockText = this.add.text(px, py - 18, '', {
             fontFamily: 'monospace', fontSize: '12px', color: '#4488cc',
         }).setOrigin(0.5);
 
-        // Energy
-        this.energyText = this.add.text(px, py + 10, '', {
-            fontFamily: 'monospace', fontSize: '14px', color: '#cc8833',
+        this.energyText = this.add.text(px, py, '', {
+            fontFamily: 'monospace', fontSize: '13px', color: '#cc8833',
         }).setOrigin(0.5);
 
-        // Player sprite placeholder
-        this.add.image(px, py - 90, 'player').setScale(3).setOrigin(0.5);
-
-        // Status effects area
-        this.playerStatusText = this.add.text(px, py + 30, '', {
-            fontFamily: 'monospace', fontSize: '11px', color: '#aa6666',
+        this.playerStatusText = this.add.text(px, py + 18, '', {
+            fontFamily: 'monospace', fontSize: '10px', color: '#aa6666',
         }).setOrigin(0.5);
     }
 
-    _buildHandArea() {
-        // Area kartu di bawah
-        this.cardObjects = [];
-        this._renderHand();
+    // ── Queue Area ────────────────────────────────────────────
+
+    _buildQueueArea() {
+        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 195, 'ANTRIAN AKSI', {
+            fontFamily: 'monospace', fontSize: '9px', color: '#222244', letterSpacing: 2,
+        }).setOrigin(0.5);
+
+        this.queueSlots = [];
+        this.queueTexts = [];
+
+        for (let i = 0; i < 3; i++) {
+            const x = GAME_WIDTH / 2 - 120 + i * 120;
+
+            const slot = this.add.rectangle(x, GAME_HEIGHT - 172, 110, 28, 0x0d0d1a)
+                .setStrokeStyle(1, 0x1a1a2e);
+            this.queueSlots.push(slot);
+
+            const txt = this.add.text(x, GAME_HEIGHT - 172, '', {
+                fontFamily: 'monospace', fontSize: '9px', color: '#445566',
+                align: 'center', wordWrap: { width: 105 },
+            }).setOrigin(0.5);
+            this.queueTexts.push(txt);
+        }
+
+        this.queueCostText = this.add.text(GAME_WIDTH / 2 + 195, GAME_HEIGHT - 172, '', {
+            fontFamily: 'monospace', fontSize: '13px', color: '#cc8833',
+        }).setOrigin(0.5);
     }
+
+    // ── HUD ───────────────────────────────────────────────────
 
     _buildHUD() {
-        // Deck & Discard counter
-        this.deckText    = this.add.text(GAME_WIDTH - 60, GAME_HEIGHT - 60, '', {
-            fontFamily: 'monospace', fontSize: '13px', color: '#556677',
+        this.deckText = this.add.text(GAME_WIDTH - 50, GAME_HEIGHT - 50, '', {
+            fontFamily: 'monospace', fontSize: '11px', color: '#2a3a4a',
         }).setOrigin(0.5);
 
-        this.discardText = this.add.text(60, GAME_HEIGHT - 60, '', {
-            fontFamily: 'monospace', fontSize: '13px', color: '#557766',
+        this.discardText = this.add.text(50, GAME_HEIGHT - 50, '', {
+            fontFamily: 'monospace', fontSize: '11px', color: '#2a3a4a',
         }).setOrigin(0.5);
 
-        // Turn indicator
-        this.turnText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 15, '', {
-            fontFamily: 'monospace', fontSize: '12px', color: '#333355',
+        this.turnText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 10, '', {
+            fontFamily: 'monospace', fontSize: '10px', color: '#1a1a33',
         }).setOrigin(0.5);
     }
 
-    _createEndTurnButton() {
-        const bx = GAME_WIDTH - 120;
-        const by = GAME_HEIGHT - 120;
+    // ── Action Buttons ────────────────────────────────────────
 
-        const bg = this.add.rectangle(bx, by, 140, 44, 0x1a1a3a)
+    _buildActionButtons() {
+        // ATTACK button
+        const ax = GAME_WIDTH - 110, ay = GAME_HEIGHT - 135;
+        const attackBg = this.add.rectangle(ax, ay, 200, 46, 0x0d0505)
+            .setStrokeStyle(1, 0x441111)
             .setInteractive({ useHandCursor: true });
-
-        this.add.graphics()
-            .lineStyle(1, 0x3344aa, 1)
-            .strokeRect(bx - 70, by - 22, 140, 44);
-
-        this.endTurnText = this.add.text(bx, by, 'END TURN', {
-            fontFamily: 'monospace', fontSize: '14px', color: '#6688cc',
+        this.attackTxt = this.add.text(ax, ay, '⚔  SERANG', {
+            fontFamily: 'monospace', fontSize: '15px', color: '#331111',
         }).setOrigin(0.5);
 
-        bg.on('pointerover', () => {
-            bg.setFillStyle(0x2a2a5a);
-            this.endTurnText.setColor('#aabbff');
+        attackBg.on('pointerover', () => attackBg.setFillStyle(0x1a0808));
+        attackBg.on('pointerout',  () => attackBg.setFillStyle(0x0d0505));
+        attackBg.on('pointerdown', () => {
+            if (this.combat.state === COMBAT_STATE.PLAYER_TURN) this._doAttack();
+        });
+        this.attackBg = attackBg;
+
+        // END TURN button
+        const ex = GAME_WIDTH - 110, ey = GAME_HEIGHT - 80;
+        const endBg = this.add.rectangle(ex, ey, 200, 38, 0x0d0d1a)
+            .setStrokeStyle(1, 0x1a2244)
+            .setInteractive({ useHandCursor: true });
+        const endTxt = this.add.text(ex, ey, 'END TURN  →', {
+            fontFamily: 'monospace', fontSize: '13px', color: '#2a3a66',
+        }).setOrigin(0.5);
+
+        endBg.on('pointerover', () => { endBg.setFillStyle(0x111133); endTxt.setColor('#4466aa'); });
+        endBg.on('pointerout',  () => { endBg.setFillStyle(0x0d0d1a); endTxt.setColor('#2a3a66'); });
+        endBg.on('pointerdown', () => {
+            if (this.combat.state === COMBAT_STATE.PLAYER_TURN) this._doEndTurn();
         });
 
-        bg.on('pointerout', () => {
-            bg.setFillStyle(0x1a1a3a);
-            this.endTurnText.setColor('#6688cc');
-        });
+        // CLEAR button
+        const cx = GAME_WIDTH / 2 + 195, cy2 = GAME_HEIGHT - 140;
+        const clearBg = this.add.rectangle(cx, cy2, 70, 24, 0x0d0d0d)
+            .setStrokeStyle(1, 0x1a1122)
+            .setInteractive({ useHandCursor: true });
+        const clearTxt = this.add.text(cx, cy2, 'clear', {
+            fontFamily: 'monospace', fontSize: '10px', color: '#2a1a33',
+        }).setOrigin(0.5);
 
-        bg.on('pointerdown', () => {
-            if (this.combat.state === COMBAT_STATE.PLAYER_TURN) {
-                this._doEndTurn();
-            }
+        clearBg.on('pointerover', () => clearTxt.setColor('#664477'));
+        clearBg.on('pointerout',  () => clearTxt.setColor('#2a1a33'));
+        clearBg.on('pointerdown', () => this._clearQueue());
+    }
+
+    // ── Tooltip ───────────────────────────────────────────────
+
+    _buildTooltip() {
+        this.tooltipBg = this.add.rectangle(0, 0, 230, 175, 0x080812)
+            .setStrokeStyle(1, 0x223344)
+            .setDepth(50)
+            .setVisible(false);
+
+        this.tooltipLines = [];
+        for (let i = 0; i < 7; i++) {
+            const t = this.add.text(0, 0, '', {
+                fontFamily: 'monospace', fontSize: '10px', color: '#aabbcc',
+                wordWrap: { width: 215 },
+            }).setDepth(51).setVisible(false);
+            this.tooltipLines.push(t);
+        }
+    }
+
+    _showTooltip(card, cardX, cardY) {
+        const tw = 230, th = 175;
+        let tx = cardX + 55;
+        let ty = cardY - th;
+        if (tx + tw > GAME_WIDTH - 10) tx = cardX - tw - 10;
+        if (ty < 10) ty = 10;
+
+        this.tooltipBg.setPosition(tx + tw / 2, ty + th / 2).setSize(tw, th).setVisible(true);
+
+        const dmgStr  = card.damage ? `Damage: ${card.damage}  (${card.damageType})` : '';
+        const blkStr  = card.block  ? `Block: ${card.block}` : '';
+        const effStr  = card.effects?.length
+            ? card.effects.map(e => `${e.type} ${e.value} × ${e.duration}t`).join(', ')
+            : '';
+        const upStr   = card.upgradedId
+            ? `Upgrade → ${card.upgradedId.replace(/_/g,' ')}`
+            : card.isUpgraded ? '★ Upgraded' : '';
+
+        const lines = [
+            { text: card.name,             color: '#ffffff',  size: '13px', dy: 14  },
+            { text: `${card.type}  |  Cost ${card.cost}`, color: '#cc8833', size: '10px', dy: 32 },
+            { text: dmgStr || blkStr,      color: '#cc6644',  size: '11px', dy: 50  },
+            { text: effStr,                color: '#6699aa',  size: '10px', dy: 68  },
+            { text: card.description || '', color: '#778899', size: '10px', dy: 88  },
+            { text: card.flavorText  || '', color: '#334455', size: '9px',  dy: 130 },
+            { text: upStr,                 color: '#44aa55',  size: '10px', dy: 158 },
+        ];
+
+        lines.forEach((line, i) => {
+            this.tooltipLines[i]
+                .setText(line.text)
+                .setColor(line.color)
+                .setFontSize(line.size)
+                .setPosition(tx + 10, ty + line.dy)
+                .setVisible(!!line.text);
         });
+    }
+
+    _hideTooltip() {
+        this.tooltipBg.setVisible(false);
+        this.tooltipLines.forEach(t => t.setVisible(false));
     }
 
     // ── Card Rendering ────────────────────────────────────────
 
     _renderHand() {
-        // Bersihkan kartu lama
-        this.cardObjects.forEach(obj => obj.forEach(o => o.destroy()));
+        // Destroy kartu lama dengan aman
+        if (this.cardObjects) {
+            this.cardObjects.forEach(objs => {
+                if (Array.isArray(objs)) objs.forEach(o => { try { o?.destroy(); } catch(e){} });
+            });
+        }
         this.cardObjects = [];
 
-        const hand  = this.player.hand;
-        const count = hand.length;
-        if (count === 0) return;
+        const hand = this.player?.hand;
+        if (!hand || hand.length === 0) return;
 
-        const cardW   = 90;
-        const cardH   = 120;
-        const spacing = 100;
-        const startX  = GAME_WIDTH / 2 - ((count - 1) * spacing) / 2;
-        const baseY   = GAME_HEIGHT - 75;
+        const maxCards = hand.length;
+        const spacing  = Math.min(108, (GAME_WIDTH - 250) / maxCards);
+        const startX   = GAME_WIDTH / 2 - ((maxCards - 1) * spacing) / 2;
+        const baseY    = GAME_HEIGHT - 68;
 
         hand.forEach((card, i) => {
-            const x = startX + i * spacing;
-            const cardObjs = this._createCardObject(card, x, baseY, i);
-            this.cardObjects.push(cardObjs);
+            const inQueue = this.selectedQueue.some(q => q.card === card);
+            const objs    = this._createCardObject(card, startX + i * spacing, baseY, i, inQueue);
+            this.cardObjects.push(objs);
         });
     }
 
-    _createCardObject(card, x, y, handIndex) {
-        const w = 90, h = 120;
+    _createCardObject(card, x, y, handIndex, inQueue = false) {
+        const w = 92, h = 112;
 
-        // Background kartu
-        const bg = this.add.image(x, y, card.spriteKey || 'card_attack')
-            .setDisplaySize(w, h)
-            .setInteractive({ useHandCursor: true });
+        const typeColors = {
+            attack:  0xcc4444,
+            defense: 0x2244cc,
+            magic:   0x8833cc,
+            support: 0x33aa44,
+        };
+        const bColor  = typeColors[card.type] || 0x444466;
+        const affordable = !inQueue &&
+            (card.cost <= this.player.energy - this.queueEnergyCost);
+
+        // Card BG
+        const bg = this.add.rectangle(x, y, w, h,
+            inQueue ? 0x1a1800 : affordable ? 0x111122 : 0x0a0a0f
+        ).setStrokeStyle(
+            inQueue ? 2 : affordable ? 1 : 1,
+            inQueue ? 0xffcc44 : affordable ? bColor : 0x1a1a22
+        );
+
+        if (!inQueue && affordable) bg.setInteractive({ useHandCursor: true });
 
         // Cost
-        const costTxt = this.add.text(x - w / 2 + 10, y - h / 2 + 8, `${card.cost}`, {
-            fontFamily: 'monospace', fontSize: '14px', color: '#ffcc44',
-        }).setOrigin(0);
+        const costCircle = this.add.circle(x - w/2 + 13, y - h/2 + 13, 11, 0x080810)
+            .setStrokeStyle(1, bColor);
+        const costTxt = this.add.text(x - w/2 + 13, y - h/2 + 13, `${card.cost}`, {
+            fontFamily: 'monospace', fontSize: '12px',
+            color: affordable || inQueue ? '#ffcc44' : '#332211', fontStyle: 'bold',
+        }).setOrigin(0.5);
 
-        // Nama kartu
-        const nameTxt = this.add.text(x, y + 22, card.name, {
-            fontFamily: 'monospace', fontSize: '9px', color: '#ffffff',
-            wordWrap:   { width: w - 8 },
-            align:      'center',
-        }).setOrigin(0.5, 0);
+        // Type label
+        const typeTxt = this.add.text(x, y - h/2 + 10, card.type.toUpperCase(), {
+            fontFamily: 'monospace', fontSize: '7px',
+            color: affordable || inQueue ? '#334466' : '#1a1a22', letterSpacing: 1,
+        }).setOrigin(0.5);
 
-        // Greyed out kalau tidak cukup energi
-        if (card.cost > this.player.energy) {
-            bg.setTint(0x444444);
-            nameTxt.setColor('#666666');
+        // Name
+        const nameTxt = this.add.text(x, y + 5, card.name, {
+            fontFamily: 'monospace', fontSize: '10px',
+            color: inQueue ? '#ffcc44' : affordable ? '#ccddee' : '#222233',
+            wordWrap: { width: w - 12 }, align: 'center',
+        }).setOrigin(0.5);
+
+        // Stat
+        const statStr = card.damage ? `⚔ ${card.damage}` : card.block ? `🛡 ${card.block}` : '';
+        const statTxt = this.add.text(x, y + 32, statStr, {
+            fontFamily: 'monospace', fontSize: '11px',
+            color: inQueue ? '#cc8833' : affordable ? '#445566' : '#1a1a22',
+        }).setOrigin(0.5);
+
+        const allObjs = [bg, costCircle, costTxt, typeTxt, nameTxt, statTxt];
+
+        if (!inQueue && affordable) {
+            let holdTimer = null;
+            let isHovered = false;
+
+            bg.on('pointerover', () => {
+                isHovered = true;
+                // Angkat kartu
+                allObjs.forEach(o => { if (o?.active) o.y -= 18; });
+                // Hold 600ms untuk tooltip
+                holdTimer = this.time.delayedCall(600, () => {
+                    if (isHovered) this._showTooltip(card, x, y - 18);
+                });
+            });
+
+            bg.on('pointerout', () => {
+                isHovered = false;
+                allObjs.forEach(o => { if (o?.active) o.y += 18; });
+                if (holdTimer) holdTimer.remove();
+                this._hideTooltip();
+            });
+
+            bg.on('pointerdown', () => {
+                if (this.combat.state !== COMBAT_STATE.PLAYER_TURN) return;
+                if (this.selectedQueue.length >= 3) return;
+                if (holdTimer) holdTimer.remove();
+                this._hideTooltip();
+                // Turunkan kartu dulu sebelum re-render
+                allObjs.forEach(o => { if (o?.active) o.y += 18; });
+                this._addToQueue(card, handIndex);
+            });
         }
 
-        // Hover: naik sedikit
-        bg.on('pointerover', () => {
-            if (card.cost <= this.player.energy) {
-                bg.y = y - 20;
-                costTxt.y = y - h / 2 + 8 - 20;
-                nameTxt.y = y + 22 - 20;
-            }
+        return allObjs;
+    }
+
+    // ── Queue ─────────────────────────────────────────────────
+
+    _addToQueue(card, handIndex) {
+        this.selectedQueue.push({ card, handIndex });
+        this.queueEnergyCost += card.cost;
+        this._refreshQueue();
+        this._refreshUI();
+        this._renderHand();
+    }
+
+    _clearQueue() {
+        this.selectedQueue   = [];
+        this.queueEnergyCost = 0;
+        this._refreshQueue();
+        this._refreshUI();
+        this._renderHand();
+    }
+
+    _refreshQueue() {
+        this.queueTexts.forEach((txt, i) => {
+            const item = this.selectedQueue[i];
+            txt.setText(item ? item.card.name : '');
+            this.queueSlots[i]
+                .setFillStyle(item ? 0x111a11 : 0x0d0d1a)
+                .setStrokeStyle(1, item ? 0x334433 : 0x1a1a2e);
         });
 
-        bg.on('pointerout', () => {
-            bg.y = y;
-            costTxt.y = y - h / 2 + 8;
-            nameTxt.y = y + 22;
-        });
+        const hasQueue = this.selectedQueue.length > 0;
+        this.queueCostText?.setText(hasQueue ? `⚡${this.queueEnergyCost}` : '');
 
-        // Klik: mainkan kartu
-        bg.on('pointerdown', () => {
-            if (this.combat.state !== COMBAT_STATE.PLAYER_TURN) return;
-            if (card.cost > this.player.energy) return;
+        // Warnai tombol attack sesuai state
+        this.attackBg?.setFillStyle(hasQueue ? 0x1a0808 : 0x0d0505);
+        this.attackBg?.setStrokeStyle(1, hasQueue ? 0x882222 : 0x441111);
+        this.attackTxt?.setColor(hasQueue ? '#cc4433' : '#331111');
+    }
 
-            const result = this.combat.playCard(handIndex, 0);
-            if (result.success) {
-                this._handleCombatEvents(result.events);
-                this._refreshUI();
-                this._renderHand();
+    // ── Actions ───────────────────────────────────────────────
 
-                if (this.combat.isOver) {
-                    this._handleCombatEnd();
-                }
-            }
-        });
+    _doAttack() {
+        if (this.selectedQueue.length === 0) return;
+        if (this.combat.state !== COMBAT_STATE.PLAYER_TURN) return;
 
-        return [bg, costTxt, nameTxt];
+        // Eksekusi dari index terbesar ke terkecil biar tidak geser
+        const sorted = [...this.selectedQueue].sort((a, b) => b.handIndex - a.handIndex);
+
+        for (const { card } of sorted) {
+            const actualIdx = this.player.hand.indexOf(card);
+            if (actualIdx === -1) continue;
+            const result = this.combat.playCard(actualIdx, 0);
+            if (!result.success) break;
+        }
+
+        this.selectedQueue   = [];
+        this.queueEnergyCost = 0;
+
+        this._refreshQueue();
+        this._refreshUI();
+        this._renderHand();
+
+        if (this.combat.isOver) this._handleCombatEnd();
+    }
+
+    _doEndTurn() {
+        if (this.combat.state !== COMBAT_STATE.PLAYER_TURN) return;
+        this._clearQueue();
+        this.combat.endPlayerTurn();
+        this._refreshUI();
+        this._renderHand();
+        if (this.combat.isOver) this._handleCombatEnd();
     }
 
     // ── UI Refresh ────────────────────────────────────────────
 
     _refreshUI() {
         const p = this.player;
+        if (!p) return;
 
-        // Player HP bar
         const hpPct = p.hp / p.stats[STAT.HP_MAX];
-        this.playerHpBar.setScale(hpPct, 1);
-        this.playerHpText.setText(`${p.hp} / ${p.stats[STAT.HP_MAX]}`);
+        this.playerHpBar?.setScale(Math.max(0, hpPct), 1);
+        this.playerHpText?.setText(`${p.hp} / ${p.stats[STAT.HP_MAX]}`);
+        this.playerBlockText?.setText(p.block > 0 ? `🛡 ${p.block}` : '');
 
-        // Block
-        this.playerBlockText.setText(p.block > 0 ? `🛡 ${p.block}` : '');
+        const remainEnergy = p.energy - this.queueEnergyCost;
+        this.energyText?.setText(`⚡ ${remainEnergy} / ${ENERGY_PER_TURN}`);
 
-        // Energy
-        this.energyText.setText(`⚡ ${p.energy} / ${ENERGY_PER_TURN}`);
-
-        // Status
         const statuses = (p.statusEffects || []).map(s => `${s.type}(${s.value})`).join(' ');
-        this.playerStatusText.setText(statuses);
+        this.playerStatusText?.setText(statuses);
 
-        // Deck / Discard
-        this.deckText.setText(`📚 ${p.deck.length}`);
-        this.discardText.setText(`🗑 ${p.discard.length}`);
-
-        // Turn
-        this.turnText.setText(
+        this.deckText?.setText(`📚 ${p.deck.length}`);
+        this.discardText?.setText(`🗑 ${p.discard.length}`);
+        this.turnText?.setText(
             this.combat.state === COMBAT_STATE.PLAYER_TURN
-                ? `Giliran Player — Turn ${this.combat.turn}`
-                : 'Giliran Musuh...'
+                ? `Turn ${this.combat.turn}  —  pilih kartu → SERANG, atau END TURN`
+                : '— Giliran Musuh —'
         );
 
-        // Monster bars & intent
         this.monsters.forEach((monster, i) => {
+            if (!this.monsterHpBars[i]) return;
+            if (monster.isDead) {
+                this.monsterSprites[i]?.setAlpha(0.15);
+                this.monsterHpBars[i]?.setScale(0, 1);
+                this.monsterHpTexts[i]?.setText('');
+                this.monsterIntentIcons[i]?.setText('');
+                this.monsterIntentLabels[i]?.setText('');
+                return;
+            }
             const hpPct = monster.hp / monster.maxHP;
-            this.monsterHpBars[i].setScale(hpPct, 1);
+            this.monsterHpBars[i].setScale(Math.max(0, hpPct), 1);
             this.monsterHpTexts[i].setText(`${monster.hp}/${monster.maxHP}`);
 
-            // Intent icon
-            const intent = monster.currentIntent?.intent || '';
-            const icons  = {
-                attack:        '⚔️',
-                attack_strong: '💥',
-                defend:        '🛡️',
-                buff:          '✨',
-                stunned:       '💫',
-            };
-            this.monsterIntentIcons[i].setText(icons[intent] || '❓');
+            const intentData = monster.currentIntent;
+            const icons = { attack:'⚔️', attack_strong:'💥', defend:'🛡️', buff:'✨', stunned:'💫' };
+            this.monsterIntentIcons[i].setText(icons[intentData?.intent] || '❓');
+            this.monsterIntentLabels[i].setText(
+                intentData?.damage ? `${intentData.damage} dmg` : intentData?.intent || ''
+            );
         });
-    }
-
-    // ── Event Handling ────────────────────────────────────────
-
-    _handleCombatEvents(events) {
-        // Phase 1: cukup log ke console, nanti diganti animasi
-        for (const evt of events) {
-            console.log('[Combat Event]', evt);
-        }
-    }
-
-    // ── End Turn ──────────────────────────────────────────────
-
-    _doEndTurn() {
-        const events = this.combat.endPlayerTurn();
-        this._handleCombatEvents(events);
-        this._refreshUI();
-        this._renderHand();
-
-        if (this.combat.isOver) {
-            this._handleCombatEnd();
-        }
     }
 
     // ── Combat End ────────────────────────────────────────────
 
     _handleCombatEnd() {
+        this.input.enabled = false;
+        this._hideTooltip();
+
         if (this.combat.playerWon) {
             this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, '✦ MENANG ✦', {
                 fontFamily: 'monospace', fontSize: '36px', color: '#ffcc44',
-            }).setOrigin(0.5);
+            }).setOrigin(0.5).setDepth(10);
 
-            this.time.delayedCall(1000, () => {
+            this.time.delayedCall(1200, () => {
                 if (this.mapData) {
-                    // Generate loot
                     const loot = LootSystem.generate({
-                        floor:      this.floor,
-                        zone:       this.zone,
+                        floor: this.floor, zone: this.zone,
                         curseLevel: this.curseLevel,
-                        isBoss:     this.isBoss,
-                        isElite:    this.isElite || false,
-                        monsters:   this.monsters,
+                        isBoss: this.isBoss, isElite: this.isElite,
+                        monsters: this.monsters,
                     });
-
                     this.scene.start(SCENE.REWARD, {
-                        zone:          this.zone,
-                        floor:         this.floor,
-                        curseLevel:    this.curseLevel,
-                        playerData:    this.player.toJSON(),
-                        mapData:       this.mapData,
+                        zone: this.zone, floor: this.floor,
+                        curseLevel: this.curseLevel,
+                        playerData: this.player.toJSON(),
+                        mapData: this.mapData,
                         currentNodeId: this.currentNodeId,
                         loot,
                     });
@@ -414,7 +596,7 @@ export class CombatScene extends Phaser.Scene {
         } else {
             this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, '✦ GAME OVER ✦', {
                 fontFamily: 'monospace', fontSize: '36px', color: '#cc3333',
-            }).setOrigin(0.5);
+            }).setOrigin(0.5).setDepth(10);
 
             this.time.delayedCall(1500, () => {
                 this.scene.start(SCENE.GAME_OVER, { floor: this.floor });

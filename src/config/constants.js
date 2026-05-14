@@ -196,5 +196,6 @@ export const SCENE = {
     NODE_MAP: 'NodeMapScene',
     BOSS_INTRO: 'BossIntroScene',
     VICTORY:    'VictoryScene',
+    EVENT: 'EventScene',
     
 };
