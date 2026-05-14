@@ -12,7 +12,8 @@ import { Monster }       from '../entities/Monster.js';
 import { CombatSystem, COMBAT_STATE } from '../systems/CombatSystem.js';
 import { DeckSystem }    from '../systems/DeckSystem.js';
 import { getMonster, getZoneMonsterPool } from '../data/monsters/index.js';
-import { STARTER_DECK }  from '../data/cards/index.js';
+import { STARTER_DECK }                  from '../data/cards/index.js';
+import { LootSystem }                    from '../systems/LootSystem.js';
 
 export class CombatScene extends Phaser.Scene {
     constructor() {
@@ -385,9 +386,17 @@ export class CombatScene extends Phaser.Scene {
             }).setOrigin(0.5);
 
             this.time.delayedCall(1000, () => {
-                // Kalau ada mapData, pergi ke RewardScene
-                // Kalau tidak (direct play), balik ke MainMenu
                 if (this.mapData) {
+                    // Generate loot
+                    const loot = LootSystem.generate({
+                        floor:      this.floor,
+                        zone:       this.zone,
+                        curseLevel: this.curseLevel,
+                        isBoss:     this.isBoss,
+                        isElite:    this.isElite || false,
+                        monsters:   this.monsters,
+                    });
+
                     this.scene.start(SCENE.REWARD, {
                         zone:          this.zone,
                         floor:         this.floor,
@@ -395,6 +404,7 @@ export class CombatScene extends Phaser.Scene {
                         playerData:    this.player.toJSON(),
                         mapData:       this.mapData,
                         currentNodeId: this.currentNodeId,
+                        loot,
                     });
                 } else {
                     this.scene.start(SCENE.MAIN_MENU);

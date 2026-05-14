@@ -17,20 +17,33 @@ export class RewardScene extends Phaser.Scene {
     }
 
     init(data) {
-        this.zone          = data.zone         || 1;
-        this.floor         = data.floor        || 1;
-        this.curseLevel    = data.curseLevel   || 1;
-        this.playerData    = data.playerData   || null;
-        this.mapData       = data.mapData      || null;
-        this.currentNodeId = data.currentNodeId|| 'start';
-        this.isTreasure    = data.isTreasure   || false;
+        this.zone          = data.zone          || 1;
+        this.floor         = data.floor         || 1;
+        this.curseLevel    = data.curseLevel    || 1;
+        this.playerData    = data.playerData    || null;
+        this.mapData       = data.mapData       || null;
+        this.currentNodeId = data.currentNodeId || 'start';
+        this.isTreasure    = data.isTreasure    || false;
+        this.loot          = data.loot          || null;
     }
 
     create() {
         this._buildBackground();
         this._buildTitle();
+        this._buildGoldReward();
         this._buildCardChoices();
         this._buildSkipButton();
+    }
+
+    _buildGoldReward() {
+        if (!this.loot?.gold) return;
+
+        this.add.text(GAME_WIDTH / 2, 155, `💰  +${this.loot.gold} Gold`, {
+            fontFamily: 'monospace',
+            fontSize:   '18px',
+            color:      '#ccaa44',
+            fontStyle:  'bold',
+        }).setOrigin(0.5);
     }
 
     // ── UI ────────────────────────────────────────────────────
@@ -64,16 +77,18 @@ export class RewardScene extends Phaser.Scene {
     }
 
     _buildCardChoices() {
-        // Ambil 3 kartu random dari pool
-        const pool    = getAllCardsArray();
-        const choices = this._pickRandom(pool, CHOICES);
+        // Pakai cardChoices dari loot kalau ada, fallback ke random
+        const pool    = this.loot?.cardChoices || getAllCardsArray();
+        const choices = this.loot?.cardChoices
+            ? this.loot.cardChoices
+            : this._pickRandom(pool, CHOICES);
 
         const spacing = 220;
-        const startX  = GAME_WIDTH / 2 - (CHOICES - 1) * spacing / 2;
+        const startX  = GAME_WIDTH / 2 - (choices.length - 1) * spacing / 2;
 
         choices.forEach((card, i) => {
             const x = startX + i * spacing;
-            this._createCardChoice(card, x, GAME_HEIGHT / 2, i);
+            this._createCardChoice(card, x, GAME_HEIGHT / 2 + 30, i);
         });
     }
 
