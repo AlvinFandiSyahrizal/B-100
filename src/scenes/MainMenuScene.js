@@ -127,10 +127,9 @@ export class MainMenuScene extends Phaser.Scene {
         // Click action
         bg.on('pointerdown', () => {
             if (key === 'start') {
-                // Phase 1: langsung ke combat untuk testing
-                // Nanti diganti ke CharacterSelectScene
-                this.scene.start(SCENE.COMBAT, {
-                    floor: 1,
+                this.scene.start(SCENE.NODE_MAP, {
+                    zone:       1,
+                    floor:      1,
                     curseLevel: 1,
                 });
             }

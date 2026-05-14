@@ -11,7 +11,7 @@ import { Player }        from '../entities/Player.js';
 import { Monster }       from '../entities/Monster.js';
 import { CombatSystem, COMBAT_STATE } from '../systems/CombatSystem.js';
 import { DeckSystem }    from '../systems/DeckSystem.js';
-import { getMonster }    from '../data/monsters/index.js';
+import { getMonster, getZoneMonsterPool } from '../data/monsters/index.js';
 import { STARTER_DECK }  from '../data/cards/index.js';
 
 export class CombatScene extends Phaser.Scene {
@@ -20,20 +20,29 @@ export class CombatScene extends Phaser.Scene {
     }
 
     init(data) {
-        this.floor      = data.floor      || 1;
-        this.curseLevel = data.curseLevel || 1;
-        this.zone       = Math.ceil(this.floor / 10);
+        this.floor         = data.floor         || 1;
+        this.curseLevel    = data.curseLevel    || 1;
+        this.zone          = data.zone          || Math.ceil(this.floor / 10);
+        this.isBoss        = data.isBoss        || false;
+        this.mapData       = data.mapData       || null;
+        this.currentNodeId = data.currentNodeId || 'start';
+
+        // Restore player dari data kalau ada, buat baru kalau tidak
+        if (data.playerData) {
+            this.player = Player.fromJSON(data.playerData);
+        } else {
+            this.player = new Player({ curseLevel: this.curseLevel });
+            this.player.initStarterDeck(
+                DeckSystem.buildDeckFromIds(STARTER_DECK)
+            );
+        }
     }
 
     create() {
-        // ── Setup entities ────────────────────────────────────
-        this.player = new Player({ curseLevel: this.curseLevel });
-        this.player.initStarterDeck(
-            DeckSystem.buildDeckFromIds(STARTER_DECK)
-        );
-
-        // Spawn 1 monster random dari zona ini
-        const monsterData = getMonster('kappa');   // Phase 1: hardcode dulu
+        // Spawn monster sesuai zona
+        const pool        = getZoneMonsterPool(this.zone);
+        const monsterId   = pool[Math.floor(Math.random() * pool.length)];
+        const monsterData = getMonster(monsterId) || getMonster('kappa');
         this.monsters     = [ new Monster(monsterData, this.floor) ];
 
         // ── Combat engine ─────────────────────────────────────
@@ -370,24 +379,34 @@ export class CombatScene extends Phaser.Scene {
     // ── Combat End ────────────────────────────────────────────
 
     _handleCombatEnd() {
-        const delay = 1500;
-
         if (this.combat.playerWon) {
             this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, '✦ MENANG ✦', {
                 fontFamily: 'monospace', fontSize: '36px', color: '#ffcc44',
             }).setOrigin(0.5);
 
-            this.time.delayedCall(delay, () => {
-                // Phase 1: balik ke MainMenu dulu
-                // Phase 2: ganti ke NodeMapScene atau RewardScene
-                this.scene.start(SCENE.MAIN_MENU);
+            this.time.delayedCall(1000, () => {
+                // Kalau ada mapData, pergi ke RewardScene
+                // Kalau tidak (direct play), balik ke MainMenu
+                if (this.mapData) {
+                    this.scene.start(SCENE.REWARD, {
+                        zone:          this.zone,
+                        floor:         this.floor,
+                        curseLevel:    this.curseLevel,
+                        playerData:    this.player.toJSON(),
+                        mapData:       this.mapData,
+                        currentNodeId: this.currentNodeId,
+                    });
+                } else {
+                    this.scene.start(SCENE.MAIN_MENU);
+                }
             });
+
         } else {
             this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, '✦ GAME OVER ✦', {
                 fontFamily: 'monospace', fontSize: '36px', color: '#cc3333',
             }).setOrigin(0.5);
 
-            this.time.delayedCall(delay, () => {
+            this.time.delayedCall(1500, () => {
                 this.scene.start(SCENE.GAME_OVER, { floor: this.floor });
             });
         }
