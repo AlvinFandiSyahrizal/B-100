@@ -2,7 +2,7 @@
 // boss_b20.js — Tengu Merah, Boss Zona 2 (B20)
 // ============================================================
 
-import { DMG_TYPE, STATUS } from '../../../config/constants.js';
+import { DMG_TYPE, STATUS } from '../../config/constants.js';
 
 export const BOSS_B20 = {
     id:          'tengu_merah',

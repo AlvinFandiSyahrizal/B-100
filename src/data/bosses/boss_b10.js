@@ -2,7 +2,7 @@
 // boss_b10.js — Kappa Agung, Boss Zona 1 (B10)
 // ============================================================
 
-import { DMG_TYPE, STATUS } from '../../../config/constants.js';
+import { DMG_TYPE, STATUS } from '../../config/constants.js';
 
 export const BOSS_B10 = {
     id:          'kappa_agung',
