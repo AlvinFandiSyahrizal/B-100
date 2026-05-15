@@ -3,6 +3,7 @@
 // ============================================================
 
 import { SCENE, GAME_WIDTH, GAME_HEIGHT } from '../config/constants.js';
+import { GameGuard } from '../utils/GameGuard.js';
 
 export class GameOverScene extends Phaser.Scene {
     constructor() {
@@ -11,6 +12,8 @@ export class GameOverScene extends Phaser.Scene {
 
     init(data) {
         this.floor = data.floor || 1;
+        // Game over = run selesai, nonaktifkan proteksi refresh
+        GameGuard.deactivate();
     }
 
     create() {

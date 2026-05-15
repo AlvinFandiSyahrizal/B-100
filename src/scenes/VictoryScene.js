@@ -3,7 +3,8 @@
 // ============================================================
 
 import { SCENE, GAME_WIDTH, GAME_HEIGHT } from '../config/constants.js';
-import { SaveSystem } from '../storage/SaveSystem.js';
+import { SaveSystem }  from '../storage/SaveSystem.js';
+import { GameGuard }   from '../utils/GameGuard.js';
 
 export class VictoryScene extends Phaser.Scene {
     constructor() {
@@ -15,7 +16,8 @@ export class VictoryScene extends Phaser.Scene {
         this.curseLevel = data.curseLevel || 1;
         this.playerData = data.playerData || null;
 
-        // Rekam ke meta
+        // Victory = run selesai
+        GameGuard.deactivate();
         SaveSystem.recordRun({ floor: this.floor, won: true });
         SaveSystem.clearRun();
     }

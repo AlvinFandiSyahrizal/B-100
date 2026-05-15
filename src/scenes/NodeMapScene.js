@@ -6,6 +6,7 @@
 import { SCENE, GAME_WIDTH, GAME_HEIGHT, NODE_TYPE } from '../config/constants.js';
 import { NodeMapGenerator } from '../systems/NodeMapGenerator.js';
 import { SaveSystem }       from '../storage/SaveSystem.js';
+import { GameGuard }        from '../utils/GameGuard.js';
 
 const MAP_START_X = 100;
 const MAP_END_X   = GAME_WIDTH - 100;
@@ -61,6 +62,9 @@ export class NodeMapScene extends Phaser.Scene {
     }
 
     create() {
+        // Aktifkan proteksi refresh selama game berjalan
+        GameGuard.activate();
+
         this._buildBackground();
         this._buildFloorInfo();
         this._buildMap();
@@ -375,12 +379,14 @@ export class NodeMapScene extends Phaser.Scene {
                         mapData:       this.mapData,
                         currentNodeId: this.currentNodeId,
                     });
+                    GameGuard.deactivate();
                     this.scene.start(SCENE.MAIN_MENU);
                 },
             },
             {
                 label:  '🔄  Mulai Ulang',
                 action: () => {
+                    GameGuard.deactivate();
                     SaveSystem.clearRun();
                     this.scene.start(SCENE.MAIN_MENU);
                 },
@@ -447,6 +453,16 @@ export class NodeMapScene extends Phaser.Scene {
         const prevNode = this.mapData.nodes.find(n => n.id === this.currentNodeId);
         if (prevNode) prevNode.cleared = true;
         this.currentNodeId = node.id;
+
+        // Checkpoint save setelah clear node
+        SaveSystem.checkpointSave({
+            zone:          this.zone,
+            floor:         this.floor,
+            curseLevel:    this.curseLevel,
+            playerData:    this.playerData,
+            mapData:       this.mapData,
+            currentNodeId: this.currentNodeId,
+        });
 
         const sceneData = {
             zone:          this.zone,

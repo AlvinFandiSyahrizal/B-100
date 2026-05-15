@@ -11,8 +11,32 @@ const SAVE_VERSION = '0.1.0';
 export class SaveSystem {
 
     /**
-     * Manual save — hanya dipanggil saat player klik "Simpan & Keluar".
-     * Refresh tanpa save = tidak ada data yang tersimpan.
+     * Checkpoint save — otomatis setelah player clear satu node.
+     * Tidak perlu konfirmasi player.
+     */
+    static checkpointSave(sceneData) {
+        try {
+            const payload = {
+                version:      SAVE_VERSION,
+                savedAt:      Date.now(),
+                isCheckpoint: true,
+                run: {
+                    zone:          sceneData.zone          || 1,
+                    floor:         sceneData.floor         || 1,
+                    curseLevel:    sceneData.curseLevel    || 1,
+                    playerData:    sceneData.playerData    || null,
+                    mapData:       sceneData.mapData       || null,
+                    currentNodeId: sceneData.currentNodeId || 'start',
+                },
+            };
+            localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+        } catch (err) {
+            console.warn('[SaveSystem] Checkpoint gagal:', err);
+        }
+    }
+
+    /**
+     * Manual save — dipanggil saat player klik "Simpan & Keluar".
      */
     static manualSave(sceneData) {
         try {
