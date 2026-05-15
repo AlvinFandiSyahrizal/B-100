@@ -1,3 +1,8 @@
+// ============================================================
+// SaveSystem.js — simpan dan load run ke localStorage
+// Semua data run disimpan dalam satu key
+// ============================================================
+
 const SAVE_KEY    = 'dungeon_b100_run';
 const META_KEY    = 'dungeon_b100_meta';
 const VERSION_KEY = 'dungeon_b100_ver';
@@ -5,20 +10,36 @@ const SAVE_VERSION = '0.1.0';
 
 export class SaveSystem {
 
+    /**
+     * Manual save — hanya dipanggil saat player klik "Simpan & Keluar".
+     * Refresh tanpa save = tidak ada data yang tersimpan.
+     */
+    static manualSave(sceneData) {
+        try {
+            const payload = {
+                version:   SAVE_VERSION,
+                savedAt:   Date.now(),
+                run: {
+                    zone:          sceneData.zone          || 1,
+                    floor:         sceneData.floor         || 1,
+                    curseLevel:    sceneData.curseLevel    || 1,
+                    playerData:    sceneData.playerData    || null,
+                    mapData:       sceneData.mapData       || null,
+                    currentNodeId: 'start',  // selalu resume dari awal lantai
+                },
+            };
+            localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+            console.log('[SaveSystem] Game disimpan.');
+            return true;
+        } catch (err) {
+            console.error('[SaveSystem] Gagal simpan:', err);
+            return false;
+        }
+    }
+
+    /** @deprecated Gunakan manualSave() */
     static autoSave(sceneData) {
-        
-        const runData = {
-            zone:          sceneData.zone          || 1,
-            floor:         sceneData.floor         || 1,
-            curseLevel:    sceneData.curseLevel    || 1,
-            playerData:    sceneData.playerData    || null,
-            mapData:       sceneData.mapData       || null,
-            // Simpan node SEBELUM masuk, bukan node yang sedang dikunjungi
-            // Sehingga saat resume, player kembali ke peta bukan ke dalam combat
-            currentNodeId: 'start',
-            savedAt:       Date.now(),
-        };
-        this.saveRun(runData);
+        // Tidak melakukan apa-apa — dihapus untuk mencegah bug resume
     }
 
     /** Simpan state run saat ini. */
