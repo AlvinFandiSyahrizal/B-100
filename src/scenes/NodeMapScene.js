@@ -66,9 +66,16 @@ export class NodeMapScene extends Phaser.Scene {
         this._buildMap();
         this._buildLegend();
         this._buildMenuButton();
+        this._pauseOpen = false;
 
-        // ESC untuk pause menu
-        this.input.keyboard.on('keydown-ESC', () => this._openPauseMenu());
+        // ESC toggle pause menu — pakai update loop bukan event listener
+        this.input.keyboard.on('keydown-ESC', () => {
+            if (this._pauseOpen) {
+                this._closePauseMenu();
+            } else {
+                this._openPauseMenu();
+            }
+        });
 
         if (this.currentNodeId === 'start') {
             this._showFloorEntryNotif();
@@ -145,16 +152,15 @@ export class NodeMapScene extends Phaser.Scene {
         const positions = {};
         const maxCol    = Math.max(...nodes.map(n => n.col));
 
+        // Tentukan berapa baris yang dipakai
+        const allRows   = [...new Set(nodes.map(n => n.row))].sort();
+        const rowCount  = allRows.length;
+        const totalH    = MAP_END_Y - MAP_START_Y;
+
         for (const node of nodes) {
-            const sameCol  = nodes.filter(n => n.col === node.col);
-            const totalH   = MAP_END_Y - MAP_START_Y;
-            const stepH    = totalH / (sameCol.length + 1);
-            const sortedCol = [...sameCol].sort((a, b) => a.row - b.row);
-            const rowIndex  = sortedCol.findIndex(n => n.id === node.id);
-
-            const x = MAP_START_X + (node.col / Math.max(maxCol, 1)) * (MAP_END_X - MAP_START_X);
-            const y = MAP_START_Y + (rowIndex + 1) * stepH;
-
+            const x        = MAP_START_X + (node.col / Math.max(maxCol, 1)) * (MAP_END_X - MAP_START_X);
+            const rowIndex = allRows.indexOf(node.row);
+            const y        = MAP_START_Y + ((rowIndex + 1) / (rowCount + 1)) * totalH;
             positions[node.id] = { x, y };
         }
 
@@ -329,54 +335,64 @@ export class NodeMapScene extends Phaser.Scene {
 
     // ── Pause Menu ────────────────────────────────────────────
 
+    // ── Pause Menu ────────────────────────────────────────────
+
     _openPauseMenu() {
         if (this._pauseOpen) return;
         this._pauseOpen = true;
+        this._pauseObjects = [];
 
-        // Overlay gelap
         const overlay = this.add.rectangle(
             GAME_WIDTH / 2, GAME_HEIGHT / 2,
-            GAME_WIDTH, GAME_HEIGHT,
-            0x000000, 0.7
+            GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75
         ).setDepth(20).setInteractive();
+        this._pauseObjects.push(overlay);
 
-        // Panel menu
         const panel = this.add.rectangle(
-            GAME_WIDTH / 2, GAME_HEIGHT / 2,
-            340, 280, 0x0d0e18
+            GAME_WIDTH / 2, GAME_HEIGHT / 2, 340, 300, 0x0d0e18
         ).setStrokeStyle(1, 0x223344).setDepth(21);
+        this._pauseObjects.push(panel);
 
-        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 100, 'PAUSED', {
+        const title = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 110, 'PAUSED', {
             fontFamily: 'monospace', fontSize: '22px',
             color: '#cc8833', fontStyle: 'bold',
         }).setOrigin(0.5).setDepth(22);
+        this._pauseObjects.push(title);
 
         const menuItems = [
-            { label: '▶  Lanjutkan',     action: () => this._closePauseMenu(overlay, panel, texts) },
-            { label: '💾  Simpan & Keluar', action: () => {
-                SaveSystem.manualSave({
-                    zone:       this.zone,
-                    floor:      this.floor,
-                    curseLevel: this.curseLevel,
-                    playerData: this.playerData,
-                    mapData:    this.mapData,
-                });
-                this.scene.start(SCENE.MAIN_MENU);
-            }},
-            { label: '🔄  Mulai Ulang',   action: () => {
-                SaveSystem.clearRun();
-                this.scene.start(SCENE.MAIN_MENU);
-            }},
+            {
+                label:  '▶  Lanjutkan',
+                action: () => this._closePauseMenu(),
+            },
+            {
+                label:  '💾  Simpan & Keluar',
+                action: () => {
+                    SaveSystem.manualSave({
+                        zone:          this.zone,
+                        floor:         this.floor,
+                        curseLevel:    this.curseLevel,
+                        playerData:    this.playerData,
+                        mapData:       this.mapData,
+                        currentNodeId: this.currentNodeId,
+                    });
+                    this.scene.start(SCENE.MAIN_MENU);
+                },
+            },
+            {
+                label:  '🔄  Mulai Ulang',
+                action: () => {
+                    SaveSystem.clearRun();
+                    this.scene.start(SCENE.MAIN_MENU);
+                },
+            },
         ];
 
-        const texts = [];
         menuItems.forEach((item, i) => {
-            const y  = GAME_HEIGHT / 2 - 40 + i * 60;
-            const bg = this.add.rectangle(GAME_WIDTH / 2, y, 280, 44, 0x111122)
+            const y  = GAME_HEIGHT / 2 - 50 + i * 65;
+            const bg = this.add.rectangle(GAME_WIDTH / 2, y, 280, 48, 0x111122)
                 .setStrokeStyle(1, 0x223344)
                 .setInteractive({ useHandCursor: true })
                 .setDepth(22);
-
             const t = this.add.text(GAME_WIDTH / 2, y, item.label, {
                 fontFamily: 'monospace', fontSize: '15px', color: '#778899',
             }).setOrigin(0.5).setDepth(23);
@@ -385,23 +401,17 @@ export class NodeMapScene extends Phaser.Scene {
             bg.on('pointerout',  () => { bg.setFillStyle(0x111122); t.setColor('#778899'); });
             bg.on('pointerdown', () => item.action());
 
-            texts.push(bg, t);
-        });
-
-        // ESC untuk tutup
-        this.input.keyboard.once('keydown-ESC', () => {
-            this._closePauseMenu(overlay, panel, texts);
+            this._pauseObjects.push(bg, t);
         });
     }
 
-    _closePauseMenu(overlay, panel, extras) {
+    _closePauseMenu() {
+        if (!this._pauseOpen) return;
         this._pauseOpen = false;
-        overlay.destroy();
-        panel.destroy();
-        extras.forEach(o => o.destroy());
-
-        // Re-register ESC
-        this.input.keyboard.on('keydown-ESC', () => this._openPauseMenu());
+        if (this._pauseObjects) {
+            this._pauseObjects.forEach(o => { try { o.destroy(); } catch(e){} });
+            this._pauseObjects = [];
+        }
     }
 
     // ── Floor Entry Notif ─────────────────────────────────────

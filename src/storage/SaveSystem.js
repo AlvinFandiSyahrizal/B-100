@@ -25,7 +25,7 @@ export class SaveSystem {
                     curseLevel:    sceneData.curseLevel    || 1,
                     playerData:    sceneData.playerData    || null,
                     mapData:       sceneData.mapData       || null,
-                    currentNodeId: 'start',  // selalu resume dari awal lantai
+                    currentNodeId: sceneData.currentNodeId || 'start',
                 },
             };
             localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
