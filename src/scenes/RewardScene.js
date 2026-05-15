@@ -222,11 +222,11 @@ export class RewardScene extends Phaser.Scene {
     }
 
     _goBack() {
-        const nextFloor = this.floor + 1;
-        const nextZone  = Math.ceil(nextFloor / 10);
-        const isBossFloor = this.floor % 10 === 0;
+        const nextFloor     = this.floor + 1;
+        const nextZone      = Math.ceil(nextFloor / 10);
+        const isBossFloor   = this.floor % 10 === 0;
 
-        // Kalau baru saja kalahkan boss B100, pergi ke VictoryScene
+        // Tamat B100
         if (this.floor >= 100) {
             this.scene.start(SCENE.VICTORY, {
                 floor:      this.floor,
@@ -236,29 +236,46 @@ export class RewardScene extends Phaser.Scene {
             return;
         }
 
-        // Kalau baru saja kalahkan boss zona (B10, B20, dst),
-        // generate map zona baru
+        // Setelah boss besar (B10, B20, dst) → lantai berikutnya = zona baru
         if (isBossFloor) {
             this.scene.start(SCENE.NODE_MAP, {
                 zone:          nextZone,
                 floor:         nextFloor,
                 curseLevel:    this.curseLevel,
                 playerData:    this.playerData,
-                mapData:       null,           // null = generate map baru
+                mapData:       null,        // generate map baru
                 currentNodeId: 'start',
             });
             return;
         }
 
-        // Combat biasa — kembali ke map yang sama
-        this.scene.start(SCENE.NODE_MAP, {
-            zone:          this.zone,
-            floor:         this.floor,
-            curseLevel:    this.curseLevel,
-            playerData:    this.playerData,
-            mapData:       this.mapData,
-            currentNodeId: this.currentNodeId,
-        });
+        // Setelah mini boss atau combat biasa → lantai berikutnya
+        // Cek apakah semua node di lantai ini sudah cleared
+        const allCleared = this.mapData?.nodes
+            ?.filter(n => n.id !== 'start')
+            ?.every(n => n.cleared || n.id === this.currentNodeId);
+
+        if (allCleared || this.currentNodeId === 'mini_boss') {
+            // Naik ke lantai berikutnya
+            this.scene.start(SCENE.NODE_MAP, {
+                zone:          this.zone,
+                floor:         nextFloor,
+                curseLevel:    this.curseLevel,
+                playerData:    this.playerData,
+                mapData:       null,        // generate map baru untuk lantai berikutnya
+                currentNodeId: 'start',
+            });
+        } else {
+            // Masih ada node yang bisa dikunjungi di lantai ini
+            this.scene.start(SCENE.NODE_MAP, {
+                zone:          this.zone,
+                floor:         this.floor,
+                curseLevel:    this.curseLevel,
+                playerData:    this.playerData,
+                mapData:       this.mapData,
+                currentNodeId: this.currentNodeId,
+            });
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────

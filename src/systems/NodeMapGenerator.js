@@ -1,48 +1,87 @@
 // ============================================================
-// NodeMapGenerator.js — generate peta node bercabang per zona
-// Struktur: B1 → B2 → ... → B9 → BOSS B10 (per zona)
-// Tiap kolom = 1 lantai, tiap lantai bisa punya 1-3 node pilihan
+// NodeMapGenerator.js — generate node map per lantai
+//
+// Struktur per lantai:
+//   Start → 3-5 node (combat/event/rest/treasure/shop) → Mini Boss → Selesai
+//
+// Struktur per zona (10 lantai):
+//   B1(map) → B2(map) → ... → B9(map) → B10 BOSS BESAR
 // ============================================================
 
 import { NODE_TYPE, NODE_WEIGHTS } from '../config/constants.js';
 
-// 9 lantai kroco + 1 boss = 10 lantai per zona
-// Kolom 0 = start, kolom 1-8 = lantai B1-B8, kolom 9 = pre-boss, kolom 10 = boss
-const FLOOR_COLUMNS = 9;   // kolom lantai aktif (B1 - B9)
-const MAX_ROWS      = 3;   // maksimal jalur paralel per kolom
+// Jumlah node aktif per lantai (tidak termasuk start dan mini boss)
+const MIN_NODES = 3;
+const MAX_NODES = 5;
+
+// Jumlah kolom layout di layar (visual)
+// Kolom 0 = start, kolom 1..N = node, kolom N+1 = mini boss / boss
+const LAYOUT_COLS = 5;
 
 export class NodeMapGenerator {
 
     /**
-     * Generate peta satu zona.
-     * @param {number} zone  - zona ke berapa (1-10)
-     * @returns {{ nodes, edges, zone }}
+     * Generate node map untuk satu lantai.
+     *
+     * @param {number} floor      - nomor lantai global (B1, B2, dst)
+     * @param {number} zone       - zona (1-10)
+     * @param {boolean} isBossFloor - true kalau lantai ini adalah boss besar (B10, B20, dst)
+     * @returns {{ nodes, edges, floor, zone, isBossFloor }}
      */
-    static generate(zone) {
+    static generate(floor, zone, isBossFloor = false) {
         const nodes = [];
         const edges = [];
 
-        // ── Kolom 0: Start ────────────────────────────────────
+        // Lantai dalam zona (1-9 untuk kroco+miniboss, 10 untuk boss besar)
+        const floorInZone = ((floor - 1) % 10) + 1;
+
+        // ── Start node ────────────────────────────────────────
         nodes.push({
             id:      'start',
             col:     0,
             row:     1,
             type:    NODE_TYPE.START,
-            floor:   this._baseFloor(zone),
+            floor,
             cleared: true,
         });
 
-        // ── Kolom 1 sampai FLOOR_COLUMNS-1: Lantai B1-B8 ─────
-        // Tiap kolom punya 1-3 node (jalur bercabang)
-        for (let col = 1; col < FLOOR_COLUMNS; col++) {
-            const floor     = this._baseFloor(zone) + col - 1;
-            const rowCount  = this._rowCountForCol(col);
+        if (isBossFloor) {
+            // ── Boss besar: langsung 1 node boss ──────────────
+            nodes.push({
+                id:      'boss',
+                col:     1,
+                row:     1,
+                type:    NODE_TYPE.BOSS,
+                floor,
+                cleared: false,
+            });
+            edges.push({ from: 'start', to: 'boss' });
 
-            // Pilih baris mana saja yang aktif
-            const activeRows = this._pickRows(rowCount);
+        } else {
+            // ── Lantai normal: 3-5 node + mini boss ───────────
+            const nodeCount = this._randInt(MIN_NODES, MAX_NODES);
+            this._generateFloorNodes(nodes, edges, floor, zone, floorInZone, nodeCount);
+        }
 
-            for (const row of activeRows) {
-                const type = this._pickNodeType(zone, col);
+        return { nodes, edges, floor, zone, isBossFloor };
+    }
+
+    // ── Floor Node Generation ─────────────────────────────────
+
+    static _generateFloorNodes(nodes, edges, floor, zone, floorInZone, nodeCount) {
+        // Bagi nodeCount ke dalam LAYOUT_COLS kolom
+        // Tiap kolom bisa punya 1-2 node (jalur bercabang)
+        const colAssignments = this._assignNodesToCols(nodeCount);
+
+        // Generate node per kolom
+        for (let col = 1; col <= LAYOUT_COLS; col++) {
+            const count = colAssignments[col] || 0;
+            if (count === 0) continue;
+
+            const rows = count === 1 ? [1] : [0, 2];  // tengah atau atas-bawah
+
+            for (const row of rows) {
+                const type = this._pickNodeType(zone, col, floorInZone);
                 nodes.push({
                     id:      `n_${col}_${row}`,
                     col,
@@ -54,39 +93,21 @@ export class NodeMapGenerator {
             }
         }
 
-        // ── Kolom FLOOR_COLUMNS: Lantai B9 — pre-boss ─────────
-        // Selalu rest atau shop biar player bisa prepare
-        const preBossFloor = this._baseFloor(zone) + FLOOR_COLUMNS - 1;
-        const preBossTypes = [
-            NODE_TYPE.REST,
-            NODE_TYPE.SHOP,
-            NODE_TYPE.REST,
-        ];
-        const preBossRows = [0, 1, 2];
-        for (const row of preBossRows) {
-            nodes.push({
-                id:      `n_${FLOOR_COLUMNS}_${row}`,
-                col:     FLOOR_COLUMNS,
-                row,
-                type:    preBossTypes[row],
-                floor:   preBossFloor,
-                cleared: false,
-            });
-        }
-
-        // ── Kolom terakhir: Boss ──────────────────────────────
+        // Mini boss di kolom terakhir
+        const lastCol = LAYOUT_COLS + 1;
         nodes.push({
-            id:      'boss',
-            col:     FLOOR_COLUMNS + 1,
+            id:      'mini_boss',
+            col:     lastCol,
             row:     1,
-            type:    NODE_TYPE.BOSS,
-            floor:   zone * 10,   // B10, B20, ... B100
+            type:    NODE_TYPE.ELITE,   // ditampilkan sebagai elite tapi spawn mini boss
+            isMini:  true,
+            floor,
             cleared: false,
         });
 
         // ── Generate edges ────────────────────────────────────
         const byCol = this._groupByCol(nodes);
-        const maxCol = FLOOR_COLUMNS + 1;
+        const maxCol = lastCol;
 
         for (let col = 0; col <= maxCol; col++) {
             const current = byCol[col] || [];
@@ -99,76 +120,93 @@ export class NodeMapGenerator {
                     const exists = edges.some(
                         e => e.from === node.id && e.to === target.id
                     );
-                    if (!exists) {
-                        edges.push({ from: node.id, to: target.id });
-                    }
+                    if (!exists) edges.push({ from: node.id, to: target.id });
                 }
             }
         }
 
-        // ── Pastikan semua node punya path ────────────────────
-        this._ensureConnectivity(nodes, edges, byCol, maxCol);
-
-        return { nodes, edges, zone };
-    }
-
-    // ── Helpers ───────────────────────────────────────────────
-
-    /** Lantai pertama zona ini. Zona 1 = B1, zona 2 = B11, dst. */
-    static _baseFloor(zone) {
-        return (zone - 1) * 10 + 1;
+        // Pastikan semua node terhubung
+        this._ensureConnectivity(nodes, edges, byCol);
     }
 
     /**
-     * Berapa banyak row (jalur) di kolom ini.
-     * Kolom awal dan akhir lebih sedikit, tengah lebih banyak.
+     * Bagi N node ke dalam LAYOUT_COLS kolom.
+     * Hasilnya: { col: jumlah_node }
      */
-    static _rowCountForCol(col) {
-        if (col <= 1 || col >= FLOOR_COLUMNS - 1) return 2;
-        return MAX_ROWS;
-    }
+    static _assignNodesToCols(nodeCount) {
+        const assignment = {};
 
-    /**
-     * Pilih baris mana yang aktif dari total rows yang tersedia.
-     * Selalu ada minimal 1 jalur di tengah (row 1).
-     */
-    static _pickRows(count) {
-        if (count >= MAX_ROWS) return [0, 1, 2];
-        if (count === 2) {
-            // Pilih 2 dari 3 baris secara acak
-            const options = [[0, 1], [1, 2], [0, 2]];
-            return options[Math.floor(Math.random() * options.length)];
+        // Kolom yang akan diisi (pilih acak dari 5 kolom)
+        const activeCols = this._pickActiveCols(nodeCount);
+
+        for (const col of activeCols) {
+            // Kolom tengah bisa dapat 2 node (bercabang)
+            if (col === 3 && nodeCount >= 5 && Math.random() < 0.5) {
+                assignment[col] = 2;
+            } else {
+                assignment[col] = 1;
+            }
         }
-        return [1]; // hanya tengah
+
+        return assignment;
+    }
+
+    static _pickActiveCols(nodeCount) {
+        // Kolom 1-5, pilih nodeCount kolom
+        const allCols = [1, 2, 3, 4, 5];
+        const shuffled = allCols.sort(() => Math.random() - 0.5);
+        return shuffled.slice(0, Math.min(nodeCount, 5)).sort((a, b) => a - b);
     }
 
     /**
-     * Pilih tipe node sesuai zona dan kolom.
+     * Pilih tipe node.
+     * floorInZone = posisi lantai dalam zona (1-9)
      */
-    static _pickNodeType(zone, col) {
-        // Kolom 2-3: lebih banyak combat
-        // Kolom 4-6: mulai variatif
-        // Kolom 7-8: elite mulai muncul
+    static _pickNodeType(zone, col, floorInZone) {
+        // Kolom 1: selalu combat (lantai awal)
+        if (col === 1) return NODE_TYPE.COMBAT;
 
-        // Override: kolom 3 selalu ada 1 elite di salah satu row
-        // (ditangani di _pickRows level, bukan di sini)
+        // Kolom 4-5: lebih banyak rest/shop biar prepare mini boss
+        if (col >= 4) {
+            const preMiniPool = [
+                NODE_TYPE.REST,
+                NODE_TYPE.REST,
+                NODE_TYPE.SHOP,
+                NODE_TYPE.COMBAT,
+                NODE_TYPE.TREASURE,
+            ];
+            return preMiniPool[Math.floor(Math.random() * preMiniPool.length)];
+        }
 
-        // Build weighted pool
+        // Kolom tengah: weighted pool
         const pool = [];
         const weights = { ...NODE_WEIGHTS };
 
-        // Zona lebih dalam = elite lebih sering
-        if (zone >= 3) weights.elite = Math.min(25, NODE_WEIGHTS.elite + zone * 2);
-
-        // Kolom tengah = event lebih sering
-        if (col >= 3 && col <= 6) weights.event += 5;
-
-        for (const [type, weight] of Object.entries(weights)) {
-            for (let i = 0; i < weight; i++) pool.push(type);
+        // Lantai awal zona: lebih banyak combat
+        if (floorInZone <= 3) {
+            weights.combat += 15;
+            weights.elite  -= 5;
         }
 
-        return pool[Math.floor(Math.random() * pool.length)];
+        // Lantai akhir zona: lebih banyak elite dan event
+        if (floorInZone >= 7) {
+            weights.elite  += 10;
+            weights.event  += 5;
+        }
+
+        // Zona dalam: elite lebih sering
+        if (zone >= 3) {
+            weights.elite = Math.min(30, weights.elite + zone * 2);
+        }
+
+        for (const [type, weight] of Object.entries(weights)) {
+            for (let i = 0; i < Math.max(0, weight); i++) pool.push(type);
+        }
+
+        return pool[Math.floor(Math.random() * pool.length)] || NODE_TYPE.COMBAT;
     }
+
+    // ── Helpers ───────────────────────────────────────────────
 
     static _groupByCol(nodes) {
         const byCol = {};
@@ -183,24 +221,25 @@ export class NodeMapGenerator {
         if (nextColNodes.length === 0) return [];
         if (nextColNodes.length === 1) return [nextColNodes[0]];
 
-        // Urutkan berdasarkan kedekatan row
+        // Ke mini boss / boss: semua jalur menuju satu node
+        if (nextColNodes[0]?.id === 'mini_boss' ||
+            nextColNodes[0]?.id === 'boss') {
+            return [nextColNodes[0]];
+        }
+
         const sorted = [...nextColNodes].sort(
             (a, b) => Math.abs(a.row - node.row) - Math.abs(b.row - node.row)
         );
 
-        // Kolom pre-boss (semua jalur menuju boss): 1 koneksi saja
-        if (nextColNodes[0]?.id === 'boss') return [nextColNodes[0]];
-
-        // Normal: 50% dapat 2 koneksi
-        const count = Math.random() < 0.5 ? 2 : 1;
+        // 40% dapat 2 koneksi
+        const count = Math.random() < 0.4 ? 2 : 1;
         return sorted.slice(0, count);
     }
 
-    static _ensureConnectivity(nodes, edges, byCol, maxCol) {
+    static _ensureConnectivity(nodes, edges, byCol) {
         for (const node of nodes) {
             if (node.id === 'start') continue;
 
-            // Pastikan punya incoming edge
             const hasIncoming = edges.some(e => e.to === node.id);
             if (!hasIncoming) {
                 const prevCol = byCol[node.col - 1];
@@ -210,9 +249,8 @@ export class NodeMapGenerator {
                 }
             }
 
-            if (node.id === 'boss') continue;
+            if (node.id === 'mini_boss' || node.id === 'boss') continue;
 
-            // Pastikan punya outgoing edge
             const hasOutgoing = edges.some(e => e.from === node.id);
             if (!hasOutgoing) {
                 const nextCol = byCol[node.col + 1];
@@ -222,6 +260,10 @@ export class NodeMapGenerator {
                 }
             }
         }
+    }
+
+    static _randInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
     /**

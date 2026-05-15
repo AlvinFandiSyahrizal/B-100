@@ -14,6 +14,7 @@ import { CombatSystem, COMBAT_STATE }     from '../systems/CombatSystem.js';
 import { DeckSystem }                     from '../systems/DeckSystem.js';
 import { getMonster, getZoneMonsterPool } from '../data/monsters/index.js';
 import { getBossForZone }                 from '../data/bosses/index.js';
+import { getMiniBoss }                    from '../data/bosses/mini_bosses.js';
 import { STARTER_DECK }                   from '../data/cards/index.js';
 import { LootSystem }                     from '../systems/LootSystem.js';
 
@@ -28,6 +29,7 @@ export class CombatScene extends Phaser.Scene {
         this.zone          = data.zone          || Math.ceil(this.floor / 10);
         this.isBoss        = data.isBoss        || false;
         this.isElite       = data.isElite       || false;
+        this.isMini        = data.isMini        || false;
         this.mapData       = data.mapData       || null;
         this.currentNodeId = data.currentNodeId || 'start';
 
@@ -59,11 +61,14 @@ export class CombatScene extends Phaser.Scene {
     create() {
         // Spawn monster atau boss sesuai tipe combat
         if (this.isBoss) {
-            // Boss: ambil data boss untuk zona ini
-            const bossData   = getBossForZone(this.zone);
-            this.monsters    = [ new Monster(bossData, this.floor) ];
+            const bossData = getBossForZone(this.zone);
+            this.monsters  = [ new Monster(bossData, this.floor) ];
+        } else if (this.isMini) {
+            // Mini boss — penjaga akhir tiap lantai
+            const floorInZone = ((this.floor - 1) % 10) + 1;
+            const miniData    = getMiniBoss(floorInZone, this.zone);
+            this.monsters     = [ new Monster(miniData, this.floor) ];
         } else {
-            // Kroco biasa atau elite
             const pool        = getZoneMonsterPool(this.zone);
             const monsterId   = pool[Math.floor(Math.random() * pool.length)];
             const monsterData = getMonster(monsterId) || getMonster('kappa');
