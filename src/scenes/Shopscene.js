@@ -20,11 +20,11 @@ export class ShopScene extends Phaser.Scene {
         this.zone          = data.zone          || 1;
         this.floor         = data.floor         || 1;
         this.curseLevel    = data.curseLevel    || 1;
-        this.playerData    = data.playerData    || null;
+        this.playerData    = data.playerData    ? JSON.parse(JSON.stringify(data.playerData)) : null;
         this.mapData       = data.mapData       || null;
         this.currentNodeId = data.currentNodeId || 'start';
 
-        // Gold player sementara (nanti dari playerData)
+        // Gold player dari playerData
         this.gold = this.playerData?.gold ?? 80;
 
         // Generate stock toko
@@ -227,12 +227,21 @@ export class ShopScene extends Phaser.Scene {
     _buyCard(item, index, priceTxt, bg) {
         this.gold -= item.price;
         item.sold  = true;
+
+        // Update gold di playerData
+        if (this.playerData) {
+            this.playerData.gold = this.gold;
+
+            // Tambah kartu ke discard pile player
+            this.playerData.discard = this.playerData.discard || [];
+            this.playerData.discard.push({ ...item.card });
+        }
+
         this.goldText.setText(`💰 ${this.gold}`);
         priceTxt.setText('TERJUAL').setColor('#222233');
         bg.setFillStyle(0x0a0a10).setStrokeStyle(1, 0x1a1a22).disableInteractive();
 
         console.log(`[Shop] Bought: ${item.card.name} for ${item.price} gold`);
-        // Phase 2 Step 6: DeckSystem.addCard(player, item.card.id)
     }
 
     _leave() {

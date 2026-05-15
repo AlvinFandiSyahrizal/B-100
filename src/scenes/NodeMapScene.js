@@ -362,11 +362,13 @@ export class NodeMapScene extends Phaser.Scene {
     // ── Navigation ────────────────────────────────────────────
 
     _enterNode(node) {
-        // Tandai node sebelumnya sebagai cleared
         const prevNode = this.mapData.nodes.find(n => n.id === this.currentNodeId);
         if (prevNode) prevNode.cleared = true;
 
         this.currentNodeId = node.id;
+
+        // Update floor sesuai node yang dipilih
+        this.floor = node.floor;
 
         const sceneData = {
             zone:          this.zone,
@@ -378,8 +380,14 @@ export class NodeMapScene extends Phaser.Scene {
             returnScene:   SCENE.NODE_MAP,
         };
 
-        // Auto-save setiap masuk node
-        SaveSystem.autoSave(sceneData);
+        // Auto-save setiap masuk node — simpan posisi di map
+        SaveSystem.autoSave({
+            zone:          this.zone,
+            floor:         node.floor,
+            curseLevel:    this.curseLevel,
+            playerData:    this.playerData,
+            mapData:       this.mapData,
+        });
 
         switch (node.type) {
             case NODE_TYPE.COMBAT:

@@ -13,6 +13,7 @@ import { Monster }                        from '../entities/Monster.js';
 import { CombatSystem, COMBAT_STATE }     from '../systems/CombatSystem.js';
 import { DeckSystem }                     from '../systems/DeckSystem.js';
 import { getMonster, getZoneMonsterPool } from '../data/monsters/index.js';
+import { getBossForZone }                 from '../data/bosses/index.js';
 import { STARTER_DECK }                   from '../data/cards/index.js';
 import { LootSystem }                     from '../systems/LootSystem.js';
 
@@ -30,34 +31,44 @@ export class CombatScene extends Phaser.Scene {
         this.mapData       = data.mapData       || null;
         this.currentNodeId = data.currentNodeId || 'start';
 
+        // Restore player — fix: pastikan deck ter-rebuild dengan benar
         if (data.playerData) {
             this.player = Player.fromJSON(data.playerData);
+
+            // Fix bug kartu tidak muncul setelah shop:
+            // Kalau deck kosong tapi discard ada, reshuffle dulu
+            if (this.player.deck.length === 0 && this.player.discard.length > 0) {
+                DeckSystem.reshuffleDiscard(this.player);
+            }
+
+            // Kalau keduanya kosong (tidak wajar), rebuild dari starter
+            if (this.player.deck.length === 0 && this.player.discard.length === 0
+                && this.player.hand.length === 0) {
+                console.warn('[CombatScene] Deck kosong total, rebuild dari starter.');
+                this.player.initStarterDeck(DeckSystem.buildDeckFromIds(STARTER_DECK));
+            }
         } else {
             this.player = new Player({ curseLevel: this.curseLevel });
-            this.player.initStarterDeck(
-                DeckSystem.buildDeckFromIds(STARTER_DECK)
-            );
+            this.player.initStarterDeck(DeckSystem.buildDeckFromIds(STARTER_DECK));
         }
 
-        // Queue kartu yang sudah dipilih tapi belum dieksekusi
         this.selectedQueue   = [];
         this.queueEnergyCost = 0;
     }
 
     create() {
-        // Spawn monster — fix bug: pastikan selalu ada monster valid
-        const pool        = getZoneMonsterPool(this.zone);
-        const monsterId   = pool[Math.floor(Math.random() * pool.length)];
-        const monsterData = getMonster(monsterId) || getMonster('kappa');
-
-        if (!monsterData) {
-            console.error('[CombatScene] Monster data tidak ditemukan! Fallback ke kappa.');
+        // Spawn monster atau boss sesuai tipe combat
+        if (this.isBoss) {
+            // Boss: ambil data boss untuk zona ini
+            const bossData   = getBossForZone(this.zone);
+            this.monsters    = [ new Monster(bossData, this.floor) ];
+        } else {
+            // Kroco biasa atau elite
+            const pool        = getZoneMonsterPool(this.zone);
+            const monsterId   = pool[Math.floor(Math.random() * pool.length)];
+            const monsterData = getMonster(monsterId) || getMonster('kappa');
+            this.monsters     = [ new Monster(monsterData, this.floor) ];
         }
-
-        this.monsters = [ new Monster(monsterData || { id:'fallback', name:'Yokai', baseHP:30,
-            spriteKey:'monster_basic', stats:{}, attackPattern:[
-                { type:'attack', damage:6, damageType:'physical', intent:'attack' }
-            ], lootTable:{ gold:[5,10] } }, this.floor) ];
 
         this.combat = new CombatSystem(this.player, this.monsters);
         this.combat.start();

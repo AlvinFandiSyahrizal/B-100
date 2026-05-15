@@ -1,8 +1,3 @@
-// ============================================================
-// SaveSystem.js — simpan dan load run ke localStorage
-// Semua data run disimpan dalam satu key
-// ============================================================
-
 const SAVE_KEY    = 'dungeon_b100_run';
 const META_KEY    = 'dungeon_b100_meta';
 const VERSION_KEY = 'dungeon_b100_ver';
@@ -10,15 +5,17 @@ const SAVE_VERSION = '0.1.0';
 
 export class SaveSystem {
 
-    /** Auto-save dipanggil setiap kali pindah scene. */
     static autoSave(sceneData) {
+        
         const runData = {
             zone:          sceneData.zone          || 1,
             floor:         sceneData.floor         || 1,
             curseLevel:    sceneData.curseLevel    || 1,
             playerData:    sceneData.playerData    || null,
             mapData:       sceneData.mapData       || null,
-            currentNodeId: sceneData.currentNodeId || 'start',
+            // Simpan node SEBELUM masuk, bukan node yang sedang dikunjungi
+            // Sehingga saat resume, player kembali ke peta bukan ke dalam combat
+            currentNodeId: 'start',
             savedAt:       Date.now(),
         };
         this.saveRun(runData);
