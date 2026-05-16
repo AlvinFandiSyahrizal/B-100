@@ -16,17 +16,20 @@ export class SaveSystem {
      */
     static checkpointSave(sceneData) {
         try {
+            // Simpan posisi node SEBELUM yang sedang dikunjungi
+            // supaya saat resume, player kembali ke peta dan bisa pilih ulang node
+            // bukan langsung masuk ke dalam node yang sedang diproses
             const payload = {
                 version:      SAVE_VERSION,
                 savedAt:      Date.now(),
                 isCheckpoint: true,
                 run: {
-                    zone:          sceneData.zone          || 1,
-                    floor:         sceneData.floor         || 1,
-                    curseLevel:    sceneData.curseLevel    || 1,
-                    playerData:    sceneData.playerData    || null,
-                    mapData:       sceneData.mapData       || null,
-                    currentNodeId: sceneData.currentNodeId || 'start',
+                    zone:          sceneData.zone       || 1,
+                    floor:         sceneData.floor      || 1,
+                    curseLevel:    sceneData.curseLevel || 1,
+                    playerData:    sceneData.playerData || null,
+                    mapData:       sceneData.mapData    || null,
+                    currentNodeId: sceneData.prevNodeId || 'start',
                 },
             };
             localStorage.setItem(SAVE_KEY, JSON.stringify(payload));

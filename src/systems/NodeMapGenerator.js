@@ -237,26 +237,37 @@ export class NodeMapGenerator {
     }
 
     static _ensureConnectivity(nodes, edges, byCol) {
+        const maxCol = Math.max(...nodes.map(n => n.col));
+
         for (const node of nodes) {
             if (node.id === 'start') continue;
 
+            // Pastikan punya minimal 1 incoming edge
             const hasIncoming = edges.some(e => e.to === node.id);
             if (!hasIncoming) {
-                const prevCol = byCol[node.col - 1];
-                if (prevCol?.length > 0) {
-                    const source = prevCol[Math.floor(Math.random() * prevCol.length)];
-                    edges.push({ from: source.id, to: node.id });
+                // Cari node terdekat di kolom sebelumnya
+                const prevColNodes = byCol[node.col - 1] || [];
+                if (prevColNodes.length > 0) {
+                    // Pilih yang row-nya paling dekat
+                    const closest = prevColNodes.reduce((a, b) =>
+                        Math.abs(a.row - node.row) <= Math.abs(b.row - node.row) ? a : b
+                    );
+                    edges.push({ from: closest.id, to: node.id });
                 }
             }
 
             if (node.id === 'mini_boss' || node.id === 'boss') continue;
+            if (node.col >= maxCol) continue;
 
+            // Pastikan punya minimal 1 outgoing edge
             const hasOutgoing = edges.some(e => e.from === node.id);
             if (!hasOutgoing) {
-                const nextCol = byCol[node.col + 1];
-                if (nextCol?.length > 0) {
-                    const target = nextCol[Math.floor(Math.random() * nextCol.length)];
-                    edges.push({ from: node.id, to: target.id });
+                const nextColNodes = byCol[node.col + 1] || [];
+                if (nextColNodes.length > 0) {
+                    const closest = nextColNodes.reduce((a, b) =>
+                        Math.abs(a.row - node.row) <= Math.abs(b.row - node.row) ? a : b
+                    );
+                    edges.push({ from: node.id, to: closest.id });
                 }
             }
         }

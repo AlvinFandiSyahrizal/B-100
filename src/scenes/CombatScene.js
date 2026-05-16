@@ -17,6 +17,7 @@ import { getBossForZone }                 from '../data/bosses/index.js';
 import { getMiniBoss }                    from '../data/bosses/mini_bosses.js';
 import { STARTER_DECK }                   from '../data/cards/index.js';
 import { LootSystem }                     from '../systems/LootSystem.js';
+import { GameGuard }                      from '../utils/GameGuard.js';
 
 export class CombatScene extends Phaser.Scene {
     constructor() {
@@ -33,19 +34,24 @@ export class CombatScene extends Phaser.Scene {
         this.mapData       = data.mapData       || null;
         this.currentNodeId = data.currentNodeId || 'start';
 
-        // Restore player — fix: pastikan deck ter-rebuild dengan benar
         if (data.playerData) {
             this.player = Player.fromJSON(data.playerData);
 
-            // Fix bug kartu tidak muncul setelah shop:
-            // Kalau deck kosong tapi discard ada, reshuffle dulu
-            if (this.player.deck.length === 0 && this.player.discard.length > 0) {
-                DeckSystem.reshuffleDiscard(this.player);
+            // Reset hand ke discard dulu (sisa kartu dari combat sebelumnya)
+            if (this.player.hand.length > 0) {
+                this.player.discard.push(...this.player.hand);
+                this.player.hand = [];
             }
 
-            // Kalau keduanya kosong (tidak wajar), rebuild dari starter
-            if (this.player.deck.length === 0 && this.player.discard.length === 0
-                && this.player.hand.length === 0) {
+            // Gabungkan deck + discard jadi satu, lalu shuffle ulang
+            // Ini memastikan semua kartu tersedia di awal combat baru
+            const allCards = [...this.player.deck, ...this.player.discard];
+            if (allCards.length > 0) {
+                this.player.deck    = allCards;
+                this.player.discard = [];
+                DeckSystem.shuffle(this.player.deck);
+            } else {
+                // Fallback kalau benar-benar kosong
                 console.warn('[CombatScene] Deck kosong total, rebuild dari starter.');
                 this.player.initStarterDeck(DeckSystem.buildDeckFromIds(STARTER_DECK));
             }
@@ -56,6 +62,8 @@ export class CombatScene extends Phaser.Scene {
 
         this.selectedQueue   = [];
         this.queueEnergyCost = 0;
+        this._pauseOpen      = false;
+        this._pauseObjects   = [];
     }
 
     create() {
@@ -78,7 +86,7 @@ export class CombatScene extends Phaser.Scene {
         this.combat = new CombatSystem(this.player, this.monsters);
         this.combat.start();
 
-        // Build UI — urutan penting
+        // Build UI
         this._buildBackground();
         this._buildMonsterArea();
         this._buildPlayerArea();
@@ -86,6 +94,13 @@ export class CombatScene extends Phaser.Scene {
         this._buildHUD();
         this._buildActionButtons();
         this._buildTooltip();
+        this._buildMenuButton();
+
+        // ESC toggle pause
+        this.input.keyboard.on('keydown-ESC', () => {
+            if (this._pauseOpen) this._closePauseMenu();
+            else this._openPauseMenu();
+        });
 
         // Render hand SETELAH semua UI siap
         this.cardObjects = [];
@@ -575,6 +590,120 @@ export class CombatScene extends Phaser.Scene {
                 intentData?.damage ? `${intentData.damage} dmg` : intentData?.intent || ''
             );
         });
+    }
+
+    // ── Menu Button & Pause Menu ──────────────────────────────
+
+    _buildMenuButton() {
+        const bg = this.add.rectangle(GAME_WIDTH - 50, 28, 70, 26, 0x0d0d1a)
+            .setStrokeStyle(1, 0x222233)
+            .setInteractive({ useHandCursor: true })
+            .setDepth(5);
+
+        this.add.text(GAME_WIDTH - 50, 28, '☰ Menu', {
+            fontFamily: 'monospace', fontSize: '11px', color: '#334455',
+        }).setOrigin(0.5).setDepth(6);
+
+        bg.on('pointerover', () => bg.setFillStyle(0x1a1a2e));
+        bg.on('pointerout',  () => bg.setFillStyle(0x0d0d1a));
+        bg.on('pointerdown', () => {
+            if (this._pauseOpen) this._closePauseMenu();
+            else this._openPauseMenu();
+        });
+    }
+
+    _openPauseMenu() {
+        if (this._pauseOpen || this.combat?.isOver) return;
+        this._pauseOpen    = true;
+        this._pauseObjects = [];
+
+        // Disable combat input
+        this.input.enabled = false;
+
+        const overlay = this.add.rectangle(
+            GAME_WIDTH / 2, GAME_HEIGHT / 2,
+            GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75
+        ).setDepth(30).setInteractive();
+        this._pauseObjects.push(overlay);
+
+        const panel = this.add.rectangle(
+            GAME_WIDTH / 2, GAME_HEIGHT / 2, 340, 300, 0x0d0e18
+        ).setStrokeStyle(1, 0x223344).setDepth(31);
+        this._pauseObjects.push(panel);
+
+        const title = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 110, 'PAUSED', {
+            fontFamily: 'monospace', fontSize: '22px',
+            color: '#cc8833', fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(32);
+        this._pauseObjects.push(title);
+
+        const items = [
+            {
+                label:  '▶  Lanjutkan',
+                action: () => this._closePauseMenu(),
+            },
+            {
+                label:  '💾  Simpan & Keluar',
+                action: () => {
+                    // Simpan posisi sebelum node ini (currentNodeId sebelum masuk combat)
+                    const { SaveSystem } = { SaveSystem: null };
+                    import('../storage/SaveSystem.js').then(({ SaveSystem }) => {
+                        SaveSystem.manualSave({
+                            zone:          this.zone,
+                            floor:         this.floor,
+                            curseLevel:    this.curseLevel,
+                            playerData:    this.player.toJSON(),
+                            mapData:       this.mapData,
+                            currentNodeId: 'start',  // kembali ke awal lantai saat resume
+                        });
+                        GameGuard.deactivate();
+                        this.scene.start(SCENE.MAIN_MENU);
+                    });
+                },
+            },
+            {
+                label:  '🔄  Mulai Ulang',
+                action: () => {
+                    import('../storage/SaveSystem.js').then(({ SaveSystem }) => {
+                        SaveSystem.clearRun();
+                        GameGuard.deactivate();
+                        this.scene.start(SCENE.MAIN_MENU);
+                    });
+                },
+            },
+        ];
+
+        items.forEach((item, i) => {
+            const y  = GAME_HEIGHT / 2 - 50 + i * 65;
+            const bg = this.add.rectangle(GAME_WIDTH / 2, y, 280, 48, 0x111122)
+                .setStrokeStyle(1, 0x223344)
+                .setInteractive({ useHandCursor: true })
+                .setDepth(32);
+            const t = this.add.text(GAME_WIDTH / 2, y, item.label, {
+                fontFamily: 'monospace', fontSize: '15px', color: '#778899',
+            }).setOrigin(0.5).setDepth(33);
+
+            bg.on('pointerover', () => { bg.setFillStyle(0x1a1a33); t.setColor('#aabbcc'); });
+            bg.on('pointerout',  () => { bg.setFillStyle(0x111122); t.setColor('#778899'); });
+            bg.on('pointerdown', () => item.action());
+
+            this._pauseObjects.push(bg, t);
+        });
+    }
+
+    _closePauseMenu() {
+        if (!this._pauseOpen) return;
+        this._pauseOpen = false;
+
+        if (this._pauseObjects) {
+            this._pauseObjects.forEach(o => { try { o.destroy(); } catch(e){} });
+            this._pauseObjects = [];
+        }
+
+        // Re-enable combat input
+        if (!this.combat?.isOver) {
+            this.input.enabled = true;
+        }
     }
 
     // ── Combat End ────────────────────────────────────────────

@@ -450,18 +450,20 @@ export class NodeMapScene extends Phaser.Scene {
     // ── Navigation ────────────────────────────────────────────
 
     _enterNode(node) {
-        const prevNode = this.mapData.nodes.find(n => n.id === this.currentNodeId);
+        const prevNodeId = this.currentNodeId;
+        const prevNode   = this.mapData.nodes.find(n => n.id === prevNodeId);
         if (prevNode) prevNode.cleared = true;
         this.currentNodeId = node.id;
 
-        // Checkpoint save setelah clear node
+        // Checkpoint: simpan posisi sebelum masuk node
+        // Sehingga kalau refresh, player kembali ke peta di posisi sebelumnya
         SaveSystem.checkpointSave({
-            zone:          this.zone,
-            floor:         this.floor,
-            curseLevel:    this.curseLevel,
-            playerData:    this.playerData,
-            mapData:       this.mapData,
-            currentNodeId: this.currentNodeId,
+            zone:        this.zone,
+            floor:       this.floor,
+            curseLevel:  this.curseLevel,
+            playerData:  this.playerData,
+            mapData:     this.mapData,
+            prevNodeId,          // posisi sebelum masuk node ini
         });
 
         const sceneData = {
