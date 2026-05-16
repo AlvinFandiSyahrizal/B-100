@@ -731,10 +731,17 @@ export class CombatScene extends Phaser.Scene {
             this.time.delayedCall(1200, () => {
                 if (this.mapData) {
                     const loot = LootSystem.generate({
-                        floor: this.floor, zone: this.zone,
+                        floor:      this.floor,
+                        zone:       this.zone,
                         curseLevel: this.curseLevel,
-                        isBoss: this.isBoss, isElite: this.isElite,
-                        monsters: this.monsters,
+                        isBoss:     this.isBoss,
+                        isElite:    this.isElite,
+                        monsters:   this.monsters,
+                        playerDeck: [
+                            ...this.player.deck,
+                            ...this.player.hand,
+                            ...this.player.discard,
+                        ],
                     });
                     this.scene.start(SCENE.REWARD, {
                         zone: this.zone, floor: this.floor,

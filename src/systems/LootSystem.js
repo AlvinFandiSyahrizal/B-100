@@ -25,9 +25,9 @@ export class LootSystem {
      * @param {object[]} options.monsters   - monster yang dikalahkan
      * @returns {{ gold: number, cardChoices: object[] }}
      */
-    static generate({ floor, zone, curseLevel = 1, isBoss = false, isElite = false, monsters = [] }) {
+    static generate({ floor, zone, curseLevel = 1, isBoss = false, isElite = false, monsters = [], playerDeck = [] }) {
         const gold        = this._rollGold(floor, curseLevel, isBoss, isElite, monsters);
-        const cardChoices = this._rollCardChoices(zone, curseLevel, isBoss, isElite);
+        const cardChoices = this._rollCardChoices(zone, curseLevel, isBoss, isElite, playerDeck);
 
         return { gold, cardChoices };
     }
@@ -62,14 +62,32 @@ export class LootSystem {
      * Pilihkan beberapa kartu untuk ditawarkan sebagai reward.
      * Rarity kartu disesuaikan zona + curse level.
      */
-    static _rollCardChoices(zone, curseLevel, isBoss, isElite) {
-        const count   = ScalingSystem.rewardCardCount(isBoss, isElite);
+    static _rollCardChoices(zone, curseLevel, isBoss, isElite, playerDeck = []) {
+        const count    = ScalingSystem.rewardCardCount(isBoss, isElite);
         const allCards = getAllCardsArray();
 
-        // Filter kartu yang sudah di-upgrade — tidak masuk reward pool
-        const pool = allCards.filter(c => !c.isUpgraded);
+        // Kumpulkan ID kartu yang sudah dimiliki player (semua versi)
+        const ownedIds = new Set(playerDeck.map(c => c.id));
 
-        // Pilih secara acak, dengan bobot rarity
+        // Kumpulkan upgradedId dari kartu yang sudah dimiliki
+        // Kalau player sudah punya 'tebas_tajam' (upgrade dari tebas_biasa),
+        // jangan tawarkan 'tebas_biasa' lagi
+        const ownedUpgradeIds = new Set(
+            playerDeck
+                .filter(c => c.upgradedId)
+                .map(c => c.upgradedId)
+        );
+
+        // Filter pool:
+        // 1. Kartu yang sudah di-upgrade (isUpgraded) tidak masuk pool
+        // 2. Kartu yang versi upgrade-nya sudah dimiliki tidak masuk pool
+        // 3. Kartu yang sudah dimiliki tetap bisa muncul (boleh double)
+        const pool = allCards.filter(c => {
+            if (c.isUpgraded) return false;           // jangan tawarkan versi upgrade
+            if (ownedUpgradeIds.has(c.id)) return false; // versi upgrade-nya sudah ada
+            return true;
+        });
+
         const choices = [];
         const used    = new Set();
 
@@ -81,18 +99,15 @@ export class LootSystem {
                 (c.rarity || RARITY.COMMON) === rarity && !used.has(c.id)
             );
 
-            if (matches.length === 0) {
-                // Fallback: ambil kartu apapun yang belum dipilih
-                const fallback = pool.filter(c => !used.has(c.id));
-                if (fallback.length === 0) break;
-                const picked = fallback[Math.floor(Math.random() * fallback.length)];
-                choices.push(picked);
-                used.add(picked.id);
-            } else {
-                const picked = matches[Math.floor(Math.random() * matches.length)];
-                choices.push(picked);
-                used.add(picked.id);
-            }
+            const source = matches.length > 0
+                ? matches
+                : pool.filter(c => !used.has(c.id));
+
+            if (source.length === 0) break;
+
+            const picked = source[Math.floor(Math.random() * source.length)];
+            choices.push(picked);
+            used.add(picked.id);
         }
 
         return choices;
