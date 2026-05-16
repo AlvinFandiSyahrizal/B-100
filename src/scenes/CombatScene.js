@@ -371,6 +371,16 @@ export class CombatScene extends Phaser.Scene {
         this.cardObjects = [];
 
         const hand = this.player?.hand;
+
+        // Debug — cek isi hand dan deck
+        console.log('[Hand Debug]', {
+            hand:    hand?.length,
+            deck:    this.player?.deck?.length,
+            discard: this.player?.discard?.length,
+            energy:  this.player?.energy,
+            card0:   hand?.[0],
+        });
+
         if (!hand || hand.length === 0) return;
 
         const maxCards = hand.length;
@@ -395,8 +405,9 @@ export class CombatScene extends Phaser.Scene {
             support: 0x33aa44,
         };
         const bColor  = typeColors[card.type] || 0x444466;
+        const cardCost   = card.cost ?? 1;
         const affordable = !inQueue &&
-            (card.cost <= this.player.energy - this.queueEnergyCost);
+            (cardCost <= this.player.energy - this.queueEnergyCost);
 
         // Card BG
         const bg = this.add.rectangle(x, y, w, h,

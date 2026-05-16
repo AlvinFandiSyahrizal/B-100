@@ -51,10 +51,19 @@ export class CombatSystem {
     start() {
         DeckSystem.shuffle(this.player.deck);
 
+        // Selalu set energy dan draw kartu di awal combat
+        // terlepas dari siapa yang jalan duluan
+        this.player.energy = ENERGY_PER_TURN;
+        this.player.block  = 0;
+        DeckSystem.draw(this.player, HAND_SIZE);
+
         if (this.state === COMBAT_STATE.PLAYER_TURN) {
-            this._startPlayerTurn();
+            this._addLog(`── Giliran 1 (Player) ──`);
         } else {
+            // Monster duluan — langsung proses giliran musuh
+            this._addLog(`── Musuh lebih cepat! ──`);
             this._startEnemyTurn();
+            this._processEnemyTurn();
         }
     }
 
@@ -147,6 +156,14 @@ export class CombatSystem {
             if (monster.isDead) continue;
 
             const action = monster.executeAction();
+
+            // Cek mati dari status effect yang di-tick di executeAction
+            if (monster.isDead) {
+                allEvents.push({ type: 'monster_died_status', monsterId: monster.id });
+                this._addLog(`${monster.name} mati karena status effect.`);
+                continue;
+            }
+
             const events = this._resolveMonsterAction(monster, action);
             allEvents.push(...events);
 
@@ -156,7 +173,10 @@ export class CombatSystem {
             }
         }
 
-        if (this.state !== COMBAT_STATE.LOSE) {
+        // Cek semua monster mati (termasuk dari status effect)
+        if (this._allMonstersDead()) {
+            this.state = COMBAT_STATE.WIN;
+        } else if (this.state !== COMBAT_STATE.LOSE) {
             this._startPlayerTurn();
         }
 

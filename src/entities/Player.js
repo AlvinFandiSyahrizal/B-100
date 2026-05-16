@@ -338,18 +338,18 @@ export class Player {
     static fromJSON(data) {
         const p = new Player({ name: data.name, curseLevel: data.curseLevel });
         Object.assign(p.baseStats, data.baseStats);
-        p.hp            = data.hp;
-        p.mp            = data.mp;
-        p.level         = data.level;
-        p.exp           = data.exp;
-        p.gold          = data.gold;
-        p.equipment     = data.equipment;
-        p.deck          = data.deck    || [];
-        p.discard       = data.discard || [];
-        p.hand          = data.hand    || [];
+        p.stats         = p._calculateStats();  // hitung dulu sebelum assign hp
+        p.hp            = Number(data.hp)    || p.stats[STAT.HP_MAX];
+        p.mp            = Number(data.mp)    || p.stats[STAT.MP_MAX];
+        p.level         = Number(data.level) || 1;
+        p.exp           = Number(data.exp)   || 0;
+        p.gold          = Number(data.gold)  || 0;
+        p.equipment     = data.equipment     || {};
+        p.deck          = data.deck          || [];
+        p.discard       = data.discard       || [];
+        p.hand          = data.hand          || [];
         p.statusEffects = data.statusEffects || [];
-        p.block         = data.block   || 0;
-        p.stats         = p._calculateStats();
+        p.block         = Number(data.block) || 0;
         return p;
     }
 }
