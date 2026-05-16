@@ -314,6 +314,9 @@ export class Player {
     // ── Serialization (untuk SaveSystem) ─────────────────────
 
     toJSON() {
+        // Pindahkan hand ke discard dulu sebelum serialize
+        // supaya tidak ada kartu yang hilang saat di-restore
+        const allCards = [...this.deck, ...this.hand, ...this.discard];
         return {
             name:          this.name,
             curseLevel:    this.curseLevel,
@@ -324,8 +327,9 @@ export class Player {
             exp:           this.exp,
             gold:          this.gold,
             equipment:     this.equipment,
-            deck:          this.deck,
-            discard:       this.discard,
+            deck:          allCards,   // semua kartu digabung, di-reshuffle saat combat berikutnya
+            discard:       [],
+            hand:          [],
             statusEffects: this.statusEffects,
             block:         this.block,
         };
@@ -340,10 +344,11 @@ export class Player {
         p.exp           = data.exp;
         p.gold          = data.gold;
         p.equipment     = data.equipment;
-        p.deck          = data.deck;
-        p.discard       = data.discard;
-        p.statusEffects = data.statusEffects;
-        p.block         = data.block;
+        p.deck          = data.deck    || [];
+        p.discard       = data.discard || [];
+        p.hand          = data.hand    || [];
+        p.statusEffects = data.statusEffects || [];
+        p.block         = data.block   || 0;
         p.stats         = p._calculateStats();
         return p;
     }
