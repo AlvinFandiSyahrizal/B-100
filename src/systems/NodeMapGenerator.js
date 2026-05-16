@@ -69,16 +69,14 @@ export class NodeMapGenerator {
     // ── Floor Node Generation ─────────────────────────────────
 
     static _generateFloorNodes(nodes, edges, floor, zone, floorInZone, nodeCount) {
-        // Bagi nodeCount ke dalam LAYOUT_COLS kolom
-        // Tiap kolom bisa punya 1-2 node (jalur bercabang)
-        const colAssignments = this._assignNodesToCols(nodeCount);
+        // Kolom SELALU berurutan 1,2,3,4,5 — tidak boleh skip kolom
+        // Tiap kolom PASTI ada minimal 1 node
+        // Hanya kolom tengah (3) yang bisa dapat 2 node
 
-        // Generate node per kolom
         for (let col = 1; col <= LAYOUT_COLS; col++) {
-            const count = colAssignments[col] || 0;
-            if (count === 0) continue;
-
-            const rows = count === 1 ? [1] : [0, 2];  // tengah atau atas-bawah
+            // Kolom 3: 30% chance dapat 2 node kalau nodeCount >= 5
+            const hasBranch = (col === 3 && nodeCount >= 5 && Math.random() < 0.3);
+            const rows = hasBranch ? [0, 2] : [1];
 
             for (const row of rows) {
                 const type = this._pickNodeType(zone, col, floorInZone);
@@ -93,69 +91,51 @@ export class NodeMapGenerator {
             }
         }
 
-        // Mini boss di kolom terakhir
+        // Mini boss selalu di kolom LAYOUT_COLS + 1
         const lastCol = LAYOUT_COLS + 1;
         nodes.push({
             id:      'mini_boss',
             col:     lastCol,
             row:     1,
-            type:    NODE_TYPE.ELITE,   // ditampilkan sebagai elite tapi spawn mini boss
+            type:    NODE_TYPE.ELITE,
             isMini:  true,
             floor,
             cleared: false,
         });
 
-        // ── Generate edges ────────────────────────────────────
+        // Generate edges — setiap node PASTI terhubung ke node berikutnya
         const byCol = this._groupByCol(nodes);
-        const maxCol = lastCol;
 
-        for (let col = 0; col <= maxCol; col++) {
+        for (let col = 0; col <= lastCol; col++) {
             const current = byCol[col] || [];
             const next    = byCol[col + 1] || [];
             if (next.length === 0) continue;
 
             for (const node of current) {
-                const targets = this._pickTargets(node, next);
-                for (const target of targets) {
-                    const exists = edges.some(
-                        e => e.from === node.id && e.to === target.id
-                    );
-                    if (!exists) edges.push({ from: node.id, to: target.id });
+                // Pilih 1 node terdekat di kolom berikutnya sebagai target utama
+                const sorted = [...next].sort(
+                    (a, b) => Math.abs(a.row - node.row) - Math.abs(b.row - node.row)
+                );
+                // Selalu ada minimal 1 koneksi
+                edges.push({ from: node.id, to: sorted[0].id });
+
+                // 35% chance dapat koneksi kedua (bercabang)
+                if (sorted.length > 1 && Math.random() < 0.35) {
+                    edges.push({ from: node.id, to: sorted[1].id });
                 }
             }
         }
 
-        // Pastikan semua node terhubung
-        this._ensureConnectivity(nodes, edges, byCol);
-    }
-
-    /**
-     * Bagi N node ke dalam LAYOUT_COLS kolom.
-     * Hasilnya: { col: jumlah_node }
-     */
-    static _assignNodesToCols(nodeCount) {
-        const assignment = {};
-
-        // Kolom yang akan diisi (pilih acak dari 5 kolom)
-        const activeCols = this._pickActiveCols(nodeCount);
-
-        for (const col of activeCols) {
-            // Kolom tengah bisa dapat 2 node (bercabang)
-            if (col === 3 && nodeCount >= 5 && Math.random() < 0.5) {
-                assignment[col] = 2;
-            } else {
-                assignment[col] = 1;
-            }
-        }
-
-        return assignment;
-    }
-
-    static _pickActiveCols(nodeCount) {
-        // Kolom 1-5, pilih nodeCount kolom
-        const allCols = [1, 2, 3, 4, 5];
-        const shuffled = allCols.sort(() => Math.random() - 0.5);
-        return shuffled.slice(0, Math.min(nodeCount, 5)).sort((a, b) => a - b);
+        // Deduplikasi edges
+        const seen = new Set();
+        const deduped = edges.filter(e => {
+            const key = `${e.from}->${e.to}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        edges.length = 0;
+        edges.push(...deduped);
     }
 
     /**
