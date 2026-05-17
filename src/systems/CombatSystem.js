@@ -185,102 +185,206 @@ export class CombatSystem {
 
     // ── Card Resolution ───────────────────────────────────────
 
-    /**
-     * Resolve efek sebuah kartu. Kembalikan array events.
-     */
     _resolveCard(card, targetIdx) {
         const events = [];
         const target = this.monsters[targetIdx] || this.monsters[0];
 
-        if (!target && card.type !== 'defense' && card.type !== 'support') {
-            return events;
+        // ── Heal ─────────────────────────────────────────────
+        if (card.heal) {
+            const healed = this.player.heal(card.heal);
+            events.push({ type: 'heal', amount: healed });
+            this._addLog(`Player heal ${healed} HP.`);
+        }
+
+        // ── Draw kartu ────────────────────────────────────────
+        if (card.drawCards) {
+            DeckSystem.draw(this.player, card.drawCards);
+            events.push({ type: 'draw', count: card.drawCards });
+        }
+
+        // ── Stance ────────────────────────────────────────────
+        if (card.stance) {
+            this.player._stance = card.stance;
+            events.push({ type: 'stance', stance: card.stance });
+            this._addLog(`Player masuk ${card.stance} stance.`);
         }
 
         // ── Damage ────────────────────────────────────────────
-        if (card.damage) {
-            let targets = card.targetAll ? this.monsters.filter(m => !m.isDead) : [target];
+        if (card.damage && target) {
+            let targets = card.targetAll
+                ? this.monsters.filter(m => !m.isDead)
+                : [target];
 
             for (const t of targets) {
                 let dmg = card.damage;
 
-                // Scaling dari stat primer
-                if (card.strScaling) {
-                    dmg += Math.floor(this.player.stats[STAT.STR] * 0.5);
-                }
-                if (card.intScaling) {
-                    dmg += Math.floor(this.player.stats[STAT.INT] * 0.6);
-                }
-                if (card.agiScaling) {
-                    dmg += Math.floor(this.player.stats[STAT.AGI] * 0.4);
-                }
+                // Stat scaling
+                if (card.strScaling) dmg += Math.floor(this.player.stats['str'] * 0.5);
+                if (card.intScaling) dmg += Math.floor(this.player.stats['int'] * 0.6);
+                if (card.agiScaling) dmg += Math.floor(this.player.stats['agi'] * 0.4);
 
                 // Sinergi Burn
-                if (card.burnBonus && t.hasStatus(STATUS.BURN)) {
+                if (card.burnBonus && t.hasStatus('burn')) dmg *= 2;
+
+                // Sinergi Wet + petir
+                if (card.wetBonus && t.hasStatus('wet')) {
                     dmg *= 2;
+                    // Kalau targetAll juga, sudah dihandle di atas
                 }
 
-                // Multi-hit (tikam cepat)
+                // Desperate: damage dari missing HP
+                if (card.desperateDmg) {
+                    const missingHp = this.player.stats['hp_max'] - this.player.hp;
+                    const mult = card.desperateMultiplier || 1;
+                    dmg = card.baseDamage + Math.floor(missingHp * mult);
+                }
+
+                // Snipe: x3/x4 kalau musuh punya status
+                if (card.statusBonus && t.statusEffects.length > 0) {
+                    dmg *= (card.statusMultiplier || 3);
+                }
+
+                // Iaijutsu: damage dari jumlah kartu di tangan
+                if (card.iaijutsu) {
+                    const mult = card.iaijutsuMultiplier || 4;
+                    dmg = this.player.hand.length * mult;
+                }
+
+                // Focus buff
+                const focusBuff = this.player.statusEffects?.find(s => s.type === 'focus');
+                if (focusBuff) {
+                    dmg = Math.floor(dmg * (focusBuff.value >= 2 ? 2 : 1.5));
+                    this.player.removeStatus('focus');
+                }
+
+                // Taiko buff
+                const taikoBuff = this.player.statusEffects?.find(s => s.type === 'taiko');
+                if (taikoBuff) dmg += taikoBuff.value;
+
+                // Stance attack bonus
+                if (this.player._stance === 'attack') dmg = Math.floor(dmg * 1.3);
+
+                // Execut: instant kill di bawah threshold
+                if (card.executeThreshold && t.hpPercent * 100 <= card.executeThreshold) {
+                    t.hp = 0;
+                    events.push({ type: 'execute', target: t.id });
+                    this._addLog(`EKSEKUSI! ${t.name} langsung KO!`);
+                    continue;
+                }
+
+                // Multi-hit
                 const hits = card.hits || 1;
                 let totalDmg = 0;
                 for (let i = 0; i < hits; i++) {
-                    const actual = t.takeDamage(dmg, card.damageType);
+                    const actual = t.takeDamage(dmg, card.damageType || 'physical');
                     totalDmg += actual;
                 }
 
                 events.push({
-                    type:    'damage',
-                    target:  t.id,
-                    amount:  totalDmg,
-                    hits:    hits,
+                    type:   'damage',
+                    target: t.id,
+                    amount: totalDmg,
+                    hits,
                     damageType: card.damageType,
                 });
+                this._addLog(`${t.name} kena ${totalDmg} damage.`);
+            }
 
-                this._addLog(`${t.name} kena ${totalDmg} damage (${card.damageType}).`);
+            // Iaijutsu: kosongi tangan setelah dipakai
+            if (card.emptyHand) {
+                this.player.discard.push(...this.player.hand);
+                this.player.hand = [];
+                events.push({ type: 'empty_hand' });
             }
         }
 
         // ── Block ─────────────────────────────────────────────
         if (card.block) {
             let blockAmt = card.block;
-            if (card.strScaling) blockAmt += Math.floor(this.player.stats[STAT.STR] * 0.3);
+            if (card.strScaling) blockAmt += Math.floor(this.player.stats['str'] * 0.3);
+            if (this.player._stance === 'defend') blockAmt = Math.floor(blockAmt * 2);
 
-            // Balas Budi: kalau ada block aktif, tambah damage ke musuh
             if (card.requiresBlock && this.player.block > 0 && card.bonusDamage && target) {
-                const actual = target.takeDamage(card.bonusDamage, DMG_TYPE.PHYSICAL);
+                const actual = target.takeDamage(card.bonusDamage, 'physical');
                 events.push({ type: 'damage', target: target.id, amount: actual, hits: 1 });
-                this._addLog(`Balas Budi! ${target.name} kena ${actual} damage.`);
             }
 
             this.player.addBlock(blockAmt);
             this.player._blockPersist = card.blockPersist || false;
             events.push({ type: 'block', amount: blockAmt });
-            this._addLog(`Player dapat Block ${blockAmt}.`);
+        }
+
+        // ── Last Stand heal ───────────────────────────────────
+        if (card.lastStand) {
+            const hpPercent = (this.player.hp / this.player.stats['hp_max']) * 100;
+            if (hpPercent <= 20) {
+                const healAmt = Math.floor(this.player.stats['hp_max'] * (card.healPercent / 100));
+                this.player.heal(healAmt);
+                if (card.gainBlock) this.player.addBlock(card.gainBlock);
+                events.push({ type: 'last_stand', heal: healAmt });
+                this._addLog(`Last Stand! Heal ${healAmt} HP.`);
+            }
+        }
+
+        // ── Haste: tambah energi ──────────────────────────────
+        const hasteBuff = card.effects?.find(e => e.type === 'haste');
+        if (hasteBuff) {
+            this.player.energy += hasteBuff.value;
+            events.push({ type: 'energy_gain', amount: hasteBuff.value });
+            this._addLog(`Haste! +${hasteBuff.value} energi.`);
         }
 
         // ── Status Effects ke musuh ───────────────────────────
         if (card.effects && card.effects.length > 0 && target) {
             for (const effect of card.effects) {
-                target.addStatus(effect.type, effect.value, effect.duration);
-                events.push({
-                    type:     'apply_status',
-                    target:   target.id,
-                    status:   effect.type,
-                    value:    effect.value,
-                    duration: effect.duration,
-                });
-                this._addLog(`${target.name} kena ${effect.type} ${effect.value} (${effect.duration} giliran).`);
+                if (['haste', 'focus', 'fortify', 'echo', 'taiko'].includes(effect.type)) {
+                    // Efek buff ke player, bukan ke musuh
+                    if (effect.type !== 'haste') {
+                        this.player.addStatus(effect.type, effect.value, effect.duration);
+                        events.push({ type: 'buff_player', status: effect.type, value: effect.value });
+                    }
+                    continue;
+                }
+
+                // Status ke semua musuh kalau targetAll
+                const statusTargets = card.targetAll
+                    ? this.monsters.filter(m => !m.isDead)
+                    : [target];
+
+                for (const t of statusTargets) {
+                    t.addStatus(effect.type, effect.value, effect.duration);
+                    events.push({
+                        type:     'apply_status',
+                        target:   t.id,
+                        status:   effect.type,
+                        value:    effect.value,
+                        duration: effect.duration,
+                    });
+                }
+                this._addLog(`${effect.type} ${effect.value} diaplikasikan.`);
             }
         }
 
-        // ── Dodge (langkah bayangan) ──────────────────────────
+        // ── Catalyze: double semua status musuh ───────────────
+        if (card.catalyze && target) {
+            for (const effect of target.statusEffects) {
+                effect.value = Math.floor(effect.value * 2);
+            }
+            events.push({ type: 'catalyze', target: target.id });
+            this._addLog(`Catalyze! Semua status effect ${target.name} di-double.`);
+        }
+
+        // ── Dodge buff dari kartu defense ─────────────────────
         if (card.effects) {
-            const dodgeEffect = card.effects.find(e => e.type === STATUS.DODGE);
+            const dodgeEffect = card.effects.find(e => e.type === 'dodge');
             if (dodgeEffect) {
-                this.player.addStatus(STATUS.DODGE, dodgeEffect.value, dodgeEffect.duration);
+                this.player.addStatus('dodge', dodgeEffect.value, dodgeEffect.duration);
                 events.push({ type: 'dodge_buff', value: dodgeEffect.value });
-                this._addLog(`Player dapat Dodge +${dodgeEffect.value}% untuk ${dodgeEffect.duration} giliran.`);
             }
         }
+
+        // Cek menang setelah resolve
+        if (this._allMonstersDead()) this.state = COMBAT_STATE.WIN;
 
         return events;
     }

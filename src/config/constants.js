@@ -13,8 +13,8 @@ export const BOSS_EVERY       = 10;   // boss di B10, B20, ...
 export const TOTAL_ZONES      = 10;
 
 // ── Combat ───────────────────────────────────────────────────
-export const ENERGY_PER_TURN  = 3;    // energi yang didapat tiap giliran
-export const HAND_SIZE        = 4;    // kartu yang ditarik tiap giliran
+export const ENERGY_PER_TURN  = 4;    // energi yang didapat tiap giliran
+export const HAND_SIZE        = 5;    // kartu yang ditarik tiap giliran
 export const MIN_DECK_SIZE    = 10;   // deck minimal awal run
 export const MAX_DECK_SIZE    = 30;   // deck tidak boleh lebih dari ini
 export const IDEAL_DECK_SIZE  = 20;   // referensi ideal
@@ -58,13 +58,23 @@ export const RARITY_WEIGHTS_BY_ZONE = [
 
 // ── Status Effects ────────────────────────────────────────────
 export const STATUS = {
-    BURN:    'burn',
-    POISON:  'poison',
-    BLEED:   'bleed',
-    STUN:    'stun',
-    FREEZE:  'freeze',
-    SHIELD:  'shield',
-    DODGE:   'dodge',
+    BURN:       'burn',
+    POISON:     'poison',
+    BLEED:      'bleed',
+    STUN:       'stun',
+    FREEZE:     'freeze',
+    CHILL:      'chill',
+    WET:        'wet',
+    CONFUSE:    'confuse',
+    SHIELD:     'shield',
+    DODGE:      'dodge',
+    HASTE:      'haste',
+    FOCUS:      'focus',
+    FORTIFY:    'fortify',
+    ECHO:       'echo',
+    CURSE:      'curse',
+    STANCE:     'stance',
+    TAIKO:      'taiko',
 };
 
 // ── Node Types (peta bercabang) ───────────────────────────────
@@ -127,7 +137,23 @@ export const STAT = {
     CRIT_DMG: 'crit_dmg',
 };
 
-// ── Card Types ────────────────────────────────────────────────
+export const STANCE = {
+    NONE:    'none',
+    ATTACK:  'attack',   // +30% damage, tidak bisa block
+    DEFEND:  'defend',   // block x2, damage -30%
+    FLOW:    'flow',     // setiap dodge, dapat 1 energi
+};
+
+// Card rarity (untuk kartu baru)
+export const CARD_RARITY = {
+    COMMON:    'common',
+    UNCOMMON:  'uncommon',
+    RARE:      'rare',
+    EPIC:      'epic',
+    LEGENDARY: 'legendary',
+};
+
+// ── Card Types (Bagian yang diperbaiki) ──────────────────────
 export const CARD_TYPE = {
     ATTACK:  'attack',
     DEFENSE: 'defense',
@@ -193,9 +219,4 @@ export const SCENE = {
     GAME_OVER: 'GameOverScene',
     VICTORY:   'VictoryScene',
     META:      'MetaScene',
-    NODE_MAP: 'NodeMapScene',
-    BOSS_INTRO: 'BossIntroScene',
-    VICTORY:    'VictoryScene',
-    EVENT: 'EventScene',
-    
 };
