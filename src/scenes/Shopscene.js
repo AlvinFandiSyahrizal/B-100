@@ -258,8 +258,32 @@ export class ShopScene extends Phaser.Scene {
     // ── Helpers ───────────────────────────────────────────────
 
     _generateStock() {
-        const all  = getAllCardsArray();
-        const pick = [...all].sort(() => Math.random() - 0.5).slice(0, SHOP_CARD_COUNT);
+        const all = getAllCardsArray();
+
+        // Ambil semua kartu yang dimiliki player
+        const playerDeck = [
+            ...(this.playerData?.deck    || []),
+            ...(this.playerData?.discard || []),
+            ...(this.playerData?.hand    || []),
+        ];
+
+        // ID kartu yang sudah dimiliki versi upgrade-nya
+        const ownedUpgradeIds = new Set(
+            playerDeck
+                .filter(c => c.upgradedId)
+                .map(c => c.upgradedId)
+        );
+
+        // Filter pool:
+        // 1. Jangan jual kartu isUpgraded (versi upgrade tidak dijual)
+        // 2. Jangan jual kartu yang versi upgrade-nya sudah dimiliki
+        const pool = all.filter(c => {
+            if (c.isUpgraded) return false;
+            if (ownedUpgradeIds.has(c.id)) return false;
+            return true;
+        });
+
+        const pick = [...pool].sort(() => Math.random() - 0.5).slice(0, SHOP_CARD_COUNT);
         return pick.map(card => ({
             card,
             price: this._cardPrice(card),
