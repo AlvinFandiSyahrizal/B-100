@@ -51,16 +51,15 @@ export class CombatSystem {
     start() {
         DeckSystem.shuffle(this.player.deck);
 
-        // Selalu set energy dan draw kartu di awal combat
-        // terlepas dari siapa yang jalan duluan
-        this.player.energy = ENERGY_PER_TURN;
-        this.player.block  = 0;
-        DeckSystem.draw(this.player, HAND_SIZE);
-
         if (this.state === COMBAT_STATE.PLAYER_TURN) {
-            this._addLog(`── Giliran 1 (Player) ──`);
+            // Player duluan — setup turn normal
+            this._startPlayerTurn();
         } else {
-            // Monster duluan — langsung proses giliran musuh
+            // Monster duluan — set energy dan draw dulu biar player bisa lihat hand
+            // sebelum musuh menyerang di turn pertama
+            this.player.energy = ENERGY_PER_TURN;
+            this.player.block  = 0;
+            DeckSystem.draw(this.player, HAND_SIZE);
             this._addLog(`── Musuh lebih cepat! ──`);
             this._startEnemyTurn();
             this._processEnemyTurn();

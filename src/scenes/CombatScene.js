@@ -371,24 +371,17 @@ export class CombatScene extends Phaser.Scene {
         this.cardObjects = [];
 
         const hand = this.player?.hand;
-
-        // Debug — cek isi hand dan deck
-        console.log('[Hand Debug]', {
-            hand:    hand?.length,
-            deck:    this.player?.deck?.length,
-            discard: this.player?.discard?.length,
-            energy:  this.player?.energy,
-            card0:   hand?.[0],
-        });
-
         if (!hand || hand.length === 0) return;
 
-        const maxCards = hand.length;
-        const spacing  = Math.min(108, (GAME_WIDTH - 250) / maxCards);
-        const startX   = GAME_WIDTH / 2 - ((maxCards - 1) * spacing) / 2;
+        // Hitung posisi berdasarkan jumlah kartu yang ada di hand sekarang
+        const count    = hand.length;
+        const maxWidth = GAME_WIDTH - 300;
+        const spacing  = Math.min(108, maxWidth / Math.max(count, 1));
+        const startX   = GAME_WIDTH / 2 - ((count - 1) * spacing) / 2;
         const baseY    = GAME_HEIGHT - 68;
 
         hand.forEach((card, i) => {
+            // Kartu yang ada di queue ditampilkan berbeda (redup/highlight)
             const inQueue = this.selectedQueue.some(q => q.card === card);
             const objs    = this._createCardObject(card, startX + i * spacing, baseY, i, inQueue);
             this.cardObjects.push(objs);
@@ -526,10 +519,10 @@ export class CombatScene extends Phaser.Scene {
         if (this.selectedQueue.length === 0) return;
         if (this.combat.state !== COMBAT_STATE.PLAYER_TURN) return;
 
-        // Eksekusi dari index terbesar ke terkecil biar tidak geser
-        const sorted = [...this.selectedQueue].sort((a, b) => b.handIndex - a.handIndex);
-
-        for (const { card } of sorted) {
+        // Eksekusi kartu satu per satu
+        // Setiap kali playCard() dipanggil, ia splice dari hand
+        // Jadi selalu cari ulang index berdasarkan referensi object
+        for (const { card } of this.selectedQueue) {
             const actualIdx = this.player.hand.indexOf(card);
             if (actualIdx === -1) continue;
             const result = this.combat.playCard(actualIdx, 0);
