@@ -1,8 +1,9 @@
 // ============================================================
 // boss_b10.js — Kappa Agung, Boss Zona 1 (B10)
+// 3 Fase: Pertahanan → Agresif → Desperate
 // ============================================================
 
-import { DMG_TYPE, STATUS } from '../../config/constants.js';
+import { DMG_TYPE } from '../../config/constants.js';
 
 export const BOSS_B10 = {
     id:          'kappa_agung',
@@ -12,69 +13,48 @@ export const BOSS_B10 = {
     zone:        1,
     isBoss:      true,
     baseHP:      180,
-    spriteKey:   'monster_basic',   // ganti dengan sprite boss nanti
-    stats: {
-        str:  18,
-        int:  10,
-        agi:  8,
-        def:  12,
-        mdef: 6,
-    },
-    // Pola serangan boss — berulang dari index 0
-    // Lebih kompleks dari kroco, ada fase
+    spriteKey:   'monster_basic',
+    stats: { str: 18, int: 10, agi: 8, def: 12, mdef: 6 },
+
+    // FASE 1 (HP 100%-60%) — Pertahanan kuat
     attackPattern: [
+        { type: 'attack', damage: 18, damageType: DMG_TYPE.PHYSICAL, intent: 'attack' },
+        { type: 'attack', damage: 14, damageType: DMG_TYPE.MAGIC,    intent: 'attack' },
+        { type: 'buff',   block: 20,                                  intent: 'defend' },
+        { type: 'attack', damage: 18, damageType: DMG_TYPE.PHYSICAL, intent: 'attack' },
+        { type: 'attack', damage: 24, damageType: DMG_TYPE.MAGIC,    intent: 'attack_strong' },
+    ],
+
+    phases: [
+        // FASE 2 (HP < 60%) — Agresif
         {
-            id:          'cakar_baja',
-            type:        'attack',
-            damage:      18,
-            damageType:  DMG_TYPE.PHYSICAL,
-            intent:      'attack',
-            description: 'Mencengkram dengan cakar sekeras baja.',
+            hpThreshold:  60,
+            announcement: '💧 Kappa Agung retak! Air mengalir dari cangkangnya... ia semakin murka!',
+            attackPattern: [
+                { type: 'attack', damage: 22, damageType: DMG_TYPE.PHYSICAL, intent: 'attack' },
+                { type: 'attack', damage: 18, damageType: DMG_TYPE.MAGIC,
+                  effects: [{ type: 'bleed', value: 4, duration: 3 }],        intent: 'attack' },
+                { type: 'attack', damage: 22, damageType: DMG_TYPE.PHYSICAL, intent: 'attack_strong' },
+                { type: 'buff',   block: 14,                                  intent: 'defend' },
+                { type: 'attack', damage: 28, damageType: DMG_TYPE.MAGIC,    intent: 'attack_strong' },
+            ],
         },
+        // FASE 3 (HP < 30%) — Desperate, all-out
         {
-            id:          'semburan_deras',
-            type:        'attack',
-            damage:      14,
-            damageType:  DMG_TYPE.MAGIC,
-            intent:      'attack',
-            effects:     [{ type: STATUS.FREEZE, value: 1, duration: 1 }],
-            description: 'Menyemburkan air bertekanan tinggi.',
-        },
-        {
-            id:          'shell_fortress',
-            type:        'buff',
-            block:       20,
-            intent:      'defend',
-            description: 'Masuk ke dalam cangkang, mendapat block besar.',
-        },
-        {
-            id:          'cakar_baja',
-            type:        'attack',
-            damage:      18,
-            damageType:  DMG_TYPE.PHYSICAL,
-            intent:      'attack',
-            description: 'Mencengkram dengan cakar sekeras baja.',
-        },
-        {
-            id:          'tsunami_kecil',
-            type:        'attack',
-            damage:      24,
-            damageType:  DMG_TYPE.MAGIC,
-            intent:      'attack_strong',
-            description: 'Serangan air yang kuat, damage besar.',
-        },
-        {
-            id:          'panggil_anak_buah',
-            type:        'summon',
-            intent:      'buff',
-            description: 'Memanggil Kappa kecil sebagai bala bantuan.',
+            hpThreshold:  30,
+            announcement: '🌊 KAPPA AGUNG LEPAS KENDALI! Seluruh sungai bawah tanah bergolak!',
+            attackPattern: [
+                { type: 'attack', damage: 28, damageType: DMG_TYPE.PHYSICAL, intent: 'attack_strong' },
+                { type: 'attack', damage: 24, damageType: DMG_TYPE.MAGIC,
+                  effects: [{ type: 'bleed', value: 6, duration: 4 }],        intent: 'attack' },
+                { type: 'attack', damage: 28, damageType: DMG_TYPE.PHYSICAL, intent: 'attack_strong' },
+                { type: 'attack', damage: 32, damageType: DMG_TYPE.MAGIC,
+                  effects: [{ type: 'stun', value: 1, duration: 1 }],         intent: 'attack_strong' },
+            ],
         },
     ],
-    lootTable: {
-        gold:  [80, 120],
-        items: [],
-    },
-    // Dialog intro boss
+
+    lootTable: { gold: [80, 120], items: [] },
     introDialog: [
         '"Berani sekali makhluk kecil masuk ke wilayahku..."',
         '"Kamu akan menjadi santapan terbaikku hari ini."',

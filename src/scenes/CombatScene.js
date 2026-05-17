@@ -398,9 +398,8 @@ export class CombatScene extends Phaser.Scene {
             support: 0x33aa44,
         };
         const bColor  = typeColors[card.type] || 0x444466;
-        const cardCost   = card.cost ?? 1;
-        const affordable = !inQueue &&
-            (cardCost <= this.player.energy - this.queueEnergyCost);
+        const cardCost   = this.combat ? this.combat.getEffectiveCost(card) : (card.cost ?? 1);
+        const affordable = !inQueue && (cardCost <= this.player.energy - this.queueEnergyCost);
 
         // Card BG
         const bg = this.add.rectangle(x, y, w, h,
@@ -519,14 +518,18 @@ export class CombatScene extends Phaser.Scene {
         if (this.selectedQueue.length === 0) return;
         if (this.combat.state !== COMBAT_STATE.PLAYER_TURN) return;
 
-        // Eksekusi kartu satu per satu
-        // Setiap kali playCard() dipanggil, ia splice dari hand
-        // Jadi selalu cari ulang index berdasarkan referensi object
         for (const { card } of this.selectedQueue) {
             const actualIdx = this.player.hand.indexOf(card);
             if (actualIdx === -1) continue;
             const result = this.combat.playCard(actualIdx, 0);
             if (!result.success) break;
+
+            // Handle phase change event
+            for (const evt of result.events) {
+                if (evt.type === 'phase_change') {
+                    this._showPhaseAnnouncement(evt.announcement);
+                }
+            }
         }
 
         this.selectedQueue   = [];
@@ -537,6 +540,46 @@ export class CombatScene extends Phaser.Scene {
         this._renderHand();
 
         if (this.combat.isOver) this._handleCombatEnd();
+    }
+
+    _showPhaseAnnouncement(text) {
+        // Overlay gelap sebentar
+        const overlay = this.add.rectangle(
+            GAME_WIDTH / 2, GAME_HEIGHT / 2,
+            GAME_WIDTH, GAME_HEIGHT,
+            0x000000, 0
+        ).setDepth(15);
+
+        const txt = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, text, {
+            fontFamily: 'monospace',
+            fontSize:   '18px',
+            color:      '#ff4444',
+            fontStyle:  'bold',
+            align:      'center',
+            wordWrap:   { width: GAME_WIDTH - 100 },
+            stroke:     '#000000',
+            strokeThickness: 4,
+        }).setOrigin(0.5).setDepth(16).setAlpha(0);
+
+        // Animasi muncul dan hilang
+        this.tweens.add({
+            targets:  [overlay, txt],
+            alpha:    { from: 0, to: 1 },
+            duration: 300,
+            onComplete: () => {
+                this.time.delayedCall(1500, () => {
+                    this.tweens.add({
+                        targets:  [overlay, txt],
+                        alpha:    0,
+                        duration: 400,
+                        onComplete: () => {
+                            overlay.destroy();
+                            txt.destroy();
+                        },
+                    });
+                });
+            },
+        });
     }
 
     _doEndTurn() {

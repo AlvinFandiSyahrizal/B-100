@@ -50,7 +50,7 @@ export const MINI_BOSSES_ZONE1 = {
         lootTable: { gold: [22, 38] },
     },
 
-    // B3 — Kodama Tua
+    // B3 — Kodama Tua (PUNYA FASE KEDUA)
     3: {
         id:          'kodama_tua',
         name:        'Kodama Tua',
@@ -67,6 +67,18 @@ export const MINI_BOSSES_ZONE1 = {
             { type: 'buff',   block: 10,                                  intent: 'defend' },
             { type: 'attack', damage: 15, damageType: DMG_TYPE.MAGIC,    intent: 'attack_strong' },
         ],
+        // FASE KEDUA: HP < 50%
+        phases: [{
+            hpThreshold:    50,
+            announcement:   '🌿 Kodama Tua murka! Hutan bangkit bersamanya!',
+            attackPattern: [
+                { type: 'attack', damage: 12, damageType: DMG_TYPE.MAGIC,    intent: 'attack' },
+                { type: 'attack', damage: 12, damageType: DMG_TYPE.MAGIC,    intent: 'attack' },
+                { type: 'attack', damage: 20, damageType: DMG_TYPE.MAGIC,
+                  effects: [{ type: 'poison', value: 4, duration: 3 }],      intent: 'attack_strong' },
+                { type: 'buff',   block: 14,                                  intent: 'defend' },
+            ],
+        }],
         lootTable: { gold: [25, 40] },
     },
 
@@ -90,7 +102,7 @@ export const MINI_BOSSES_ZONE1 = {
         lootTable: { gold: [28, 45] },
     },
 
-    // B5 — Tanuki Dukun
+    // B5 — Tanuki Dukun (PUNYA FASE KEDUA)
     5: {
         id:          'tanuki_dukun',
         name:        'Tanuki Dukun',
@@ -103,12 +115,25 @@ export const MINI_BOSSES_ZONE1 = {
         stats: { str: 8, int: 14, agi: 8, def: 5, mdef: 9 },
         attackPattern: [
             { type: 'attack', damage: 8,  damageType: DMG_TYPE.MAGIC,
-              effects: [{ type: STATUS.POISON, value: 3, duration: 3 }], intent: 'attack' },
-            { type: 'attack', damage: 10, damageType: DMG_TYPE.MAGIC,    intent: 'attack' },
-            { type: 'buff',   block: 8,                                   intent: 'buff'   },
+              effects: [{ type: 'poison', value: 3, duration: 3 }],      intent: 'attack' },
+            { type: 'attack', damage: 10, damageType: DMG_TYPE.MAGIC,   intent: 'attack' },
+            { type: 'buff',   block: 8,                                  intent: 'buff'   },
             { type: 'attack', damage: 12, damageType: DMG_TYPE.MAGIC,
-              effects: [{ type: STATUS.POISON, value: 5, duration: 4 }], intent: 'attack_strong' },
+              effects: [{ type: 'poison', value: 5, duration: 4 }],      intent: 'attack_strong' },
         ],
+        phases: [{
+            hpThreshold:    50,
+            announcement:   '🍄 Tanuki Dukun memanggil racun kuno yang tidak bisa disembuhkan!',
+            attackPattern: [
+                { type: 'attack', damage: 10, damageType: DMG_TYPE.MAGIC,
+                  effects: [{ type: 'poison', value: 6, duration: 5 }],  intent: 'attack' },
+                { type: 'attack', damage: 14, damageType: DMG_TYPE.MAGIC,intent: 'attack_strong' },
+                { type: 'attack', damage: 10, damageType: DMG_TYPE.MAGIC,
+                  effects: [{ type: 'poison', value: 4, duration: 3 }],  intent: 'attack' },
+                { type: 'buff',   block: 10,
+                  effects: [{ type: 'poison', value: 3, duration: 2 }],  intent: 'buff' },
+            ],
+        }],
         lootTable: { gold: [32, 50] },
     },
 
@@ -133,7 +158,7 @@ export const MINI_BOSSES_ZONE1 = {
         lootTable: { gold: [35, 55] },
     },
 
-    // B7 — Kodama Raja
+    // B7 — Kodama Raja (PUNYA FASE KEDUA)
     7: {
         id:          'kodama_raja',
         name:        'Kodama Raja',
@@ -151,6 +176,17 @@ export const MINI_BOSSES_ZONE1 = {
             { type: 'attack', damage: 10, damageType: DMG_TYPE.MAGIC,    intent: 'attack' },
             { type: 'attack', damage: 20, damageType: DMG_TYPE.MAGIC,    intent: 'attack_strong' },
         ],
+        phases: [{
+            hpThreshold:    50,
+            announcement:   '👑 Kodama Raja menyatukan seluruh jiwa hutan! Kekuatannya berlipat ganda!',
+            attackPattern: [
+                { type: 'attack', damage: 16, damageType: DMG_TYPE.MAGIC,    intent: 'attack' },
+                { type: 'attack', damage: 16, damageType: DMG_TYPE.MAGIC,    intent: 'attack' },
+                { type: 'attack', damage: 26, damageType: DMG_TYPE.MAGIC,
+                  effects: [{ type: 'stun', value: 1, duration: 1 }],        intent: 'attack_strong' },
+                { type: 'buff',   block: 20,                                  intent: 'defend' },
+            ],
+        }],
         lootTable: { gold: [38, 60] },
     },
 
@@ -168,15 +204,15 @@ export const MINI_BOSSES_ZONE1 = {
         attackPattern: [
             { type: 'attack', damage: 12, damageType: DMG_TYPE.PHYSICAL, intent: 'attack' },
             { type: 'attack', damage: 12, damageType: DMG_TYPE.MAGIC,
-              effects: [{ type: STATUS.STUN, value: 1, duration: 1 }],   intent: 'attack' },
-            { type: 'buff',   block: 14,                                  intent: 'buff'   },
-            { type: 'attack', damage: 16, damageType: DMG_TYPE.PHYSICAL, intent: 'attack_strong' },
-            { type: 'attack', damage: 14, damageType: DMG_TYPE.MAGIC,    intent: 'attack' },
+              effects: [{ type: 'stun', value: 1, duration: 1 }],            intent: 'attack' },
+            { type: 'buff',   block: 14,                                      intent: 'buff'   },
+            { type: 'attack', damage: 16, damageType: DMG_TYPE.PHYSICAL,     intent: 'attack_strong' },
+            { type: 'attack', damage: 14, damageType: DMG_TYPE.MAGIC,        intent: 'attack' },
         ],
         lootTable: { gold: [42, 65] },
     },
 
-    // B9 — Kappa Jenderal
+    // B9 — Kappa Jenderal (PUNYA FASE KEDUA)
     9: {
         id:          'kappa_jenderal',
         name:        'Kappa Jenderal',
@@ -193,8 +229,20 @@ export const MINI_BOSSES_ZONE1 = {
             { type: 'attack', damage: 12, damageType: DMG_TYPE.MAGIC,    intent: 'attack' },
             { type: 'attack', damage: 20, damageType: DMG_TYPE.PHYSICAL, intent: 'attack_strong' },
             { type: 'attack', damage: 14, damageType: DMG_TYPE.MAGIC,
-              effects: [{ type: STATUS.BLEED, value: 4, duration: 3 }],  intent: 'attack' },
+              effects: [{ type: 'bleed', value: 4, duration: 3 }],        intent: 'attack' },
         ],
+        phases: [{
+            hpThreshold:    50,
+            announcement:   '⚔️ Kappa Jenderal melepas zirahnya! Kecepatan dan keganasannya meningkat drastis!',
+            attackPattern: [
+                { type: 'attack', damage: 22, damageType: DMG_TYPE.PHYSICAL, intent: 'attack' },
+                { type: 'attack', damage: 22, damageType: DMG_TYPE.PHYSICAL, intent: 'attack_strong' },
+                { type: 'attack', damage: 16, damageType: DMG_TYPE.MAGIC,
+                  effects: [{ type: 'bleed', value: 6, duration: 4 }],       intent: 'attack' },
+                { type: 'attack', damage: 28, damageType: DMG_TYPE.PHYSICAL,
+                  effects: [{ type: 'stun', value: 1, duration: 1 }],        intent: 'attack_strong' },
+            ],
+        }],
         lootTable: { gold: [48, 75] },
     },
 };

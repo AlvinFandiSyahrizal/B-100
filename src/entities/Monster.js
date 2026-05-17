@@ -1,23 +1,21 @@
 // ============================================================
 // Monster.js — class monster
-// Data monster ada di data/monsters/, class ini yang jalankan logikanya
+// Support multi-fase untuk mini boss dan boss besar
 // ============================================================
 
 import { STAT, DMG_TYPE, MONSTER_SCALE_PER_FLOOR } from '../config/constants.js';
 
 export class Monster {
-    /**
-     * @param {object} data   - data monster dari data/monsters/
-     * @param {number} floor  - lantai saat ini, untuk scaling
-     */
     constructor(data, floor = 1) {
         this.id          = data.id;
         this.name        = data.name;
+        this.title       = data.title || '';
         this.description = data.description || '';
         this.zone        = data.zone || 1;
+        this.isBoss      = data.isBoss || false;
+        this.isMini      = data.isMini || false;
         this.spriteKey   = data.spriteKey || 'monster_basic';
 
-        // ── Scaling stat berdasarkan lantai ───────────────────
         const scale = 1 + (floor - 1) * MONSTER_SCALE_PER_FLOOR;
 
         this.maxHP = Math.round(data.baseHP * scale);
@@ -31,32 +29,68 @@ export class Monster {
             [STAT.MDEF]: Math.round((data.stats?.mdef || 1) * scale),
         };
 
-        // ── Attack Pattern ────────────────────────────────────
-        // Array of { type, value, intent } — intent yang ditampilkan ke player
+        // ── Fase sistem ───────────────────────────────────────
+        // phases: array of { hpThreshold, attackPattern, announcement }
+        // hpThreshold: persentase HP untuk masuk fase ini (0-100)
+        this.phases       = data.phases || null;
+        this.currentPhase = 0;
+        this._phaseTriggered = {};  // track fase yang sudah ditrigger
+
+        // Pattern fase 1 (default)
         this.attackPattern = data.attackPattern || [
             { type: 'attack', damage: 8, damageType: DMG_TYPE.PHYSICAL, intent: 'attack' }
         ];
-        this.patternIndex = 0;  // giliran mana sekarang
+        this.patternIndex = 0;
 
-        // ── Status Effects ────────────────────────────────────
         this.statusEffects = [];
         this.block         = 0;
+        this.isStunned     = false;
 
-        // ── Loot ──────────────────────────────────────────────
         this.lootTable = data.lootTable || { gold: [5, 15], items: [] };
-
-        // ── State ─────────────────────────────────────────────
-        this.isStunned = false;
     }
 
-    // ── Intent (apa yang mau dilakukan giliran ini) ───────────
+    // ── Fase Detection ────────────────────────────────────────
 
-    /** Kembalikan action berikutnya, TANPA menjalankannya. */
+    /**
+     * Cek apakah ada transisi fase baru.
+     * Dipanggil setiap kali HP berubah.
+     * Return { triggered: bool, phase: object } kalau ada fase baru.
+     */
+    checkPhaseTransition() {
+        if (!this.phases || this.phases.length === 0) return null;
+
+        const hpPercent = (this.hp / this.maxHP) * 100;
+
+        for (let i = 0; i < this.phases.length; i++) {
+            const phase = this.phases[i];
+            if (hpPercent <= phase.hpThreshold && !this._phaseTriggered[i]) {
+                this._phaseTriggered[i] = true;
+                this.currentPhase       = i + 1;
+
+                // Ganti attack pattern ke fase baru
+                if (phase.attackPattern) {
+                    this.attackPattern = phase.attackPattern;
+                    this.patternIndex  = 0;
+                }
+
+                return { triggered: true, phase, phaseIndex: i + 1 };
+            }
+        }
+
+        return null;
+    }
+
+    get currentPhaseName() {
+        if (!this.phases || this.currentPhase === 0) return 'Fase 1';
+        return `Fase ${this.currentPhase + 1}`;
+    }
+
+    // ── Intent ────────────────────────────────────────────────
+
     get currentIntent() {
         return this.attackPattern[this.patternIndex % this.attackPattern.length];
     }
 
-    /** Jalankan action dan advance pattern. Kembalikan action yang dijalankan. */
     executeAction() {
         if (this.isStunned) {
             this.isStunned = false;
@@ -70,7 +104,7 @@ export class Monster {
         return action;
     }
 
-    // ── HP / Damage / Heal ────────────────────────────────────
+    // ── HP / Damage ───────────────────────────────────────────
 
     takeDamage(amount, type = 'physical') {
         let actual = amount;
@@ -97,25 +131,18 @@ export class Monster {
         return this.hp - before;
     }
 
-    addBlock(amount) {
-        this.block += amount;
-    }
+    addBlock(amount) { this.block += amount; }
 
-    get isDead() {
-        return this.hp <= 0;
-    }
-
-    get hpPercent() {
-        return this.hp / this.maxHP;
-    }
+    get isDead()    { return this.hp <= 0; }
+    get hpPercent() { return this.hp / this.maxHP; }
 
     // ── Status Effects ────────────────────────────────────────
 
     addStatus(type, value, duration) {
         const existing = this.statusEffects.find(s => s.type === type);
         if (existing) {
-            existing.value    += value;    // status monster biasanya stack
-            existing.duration = Math.max(existing.duration, duration);
+            existing.value    += value;
+            existing.duration  = Math.max(existing.duration, duration);
         } else {
             this.statusEffects.push({ type, value, duration });
         }
@@ -135,6 +162,12 @@ export class Monster {
                     break;
                 case 'stun':
                     this.isStunned = true;
+                    break;
+                case 'freeze':
+                    this.isStunned = true;
+                    break;
+                case 'chill':
+                    // Ditangani di CombatSystem saat kalkulasi damage
                     break;
             }
             effect.duration--;
