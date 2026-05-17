@@ -153,7 +153,7 @@ export const CARD_RARITY = {
     LEGENDARY: 'legendary',
 };
 
-// ── Card Types (Bagian yang diperbaiki) ──────────────────────
+// ── Card Types ────────────────────────────────────────────────
 export const CARD_TYPE = {
     ATTACK:  'attack',
     DEFENSE: 'defense',

@@ -4,7 +4,7 @@
 // Engine CombatSystem yang baca dan jalankan efeknya
 // ============================================================
 
-import { CARD_TYPE, DMG_TYPE, STATUS } from '../../config/constants.js';
+import { CARD_TYPE, DMG_TYPE, STATUS, CARD_RARITY } from '../../config/constants.js';
 
 export const ATTACK_CARDS = {
 

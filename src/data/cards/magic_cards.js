@@ -2,7 +2,7 @@
 // magic_cards.js — kartu tipe jutsu / ofuda / magic
 // ============================================================
 
-import { CARD_TYPE, DMG_TYPE, STATUS } from '../../config/constants.js';
+import { CARD_TYPE, DMG_TYPE, STATUS, CARD_RARITY } from '../../config/constants.js';
 
 export const MAGIC_CARDS = {
 
