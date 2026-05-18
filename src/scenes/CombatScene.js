@@ -607,7 +607,12 @@ export class CombatScene extends Phaser.Scene {
         const remainEnergy = p.energy - this.queueEnergyCost;
         this.energyText?.setText(`⚡ ${remainEnergy} / ${ENERGY_PER_TURN}`);
 
-        const statuses = (p.statusEffects || []).map(s => `${s.type}(${s.value})`).join(' ');
+        // Status effects — hanya tampil yang relevan untuk player
+        const visibleStatuses = ['burn', 'poison', 'bleed', 'stun', 'freeze', 'chill', 'wet', 'dodge', 'fortify'];
+        const statuses = (p.statusEffects || [])
+            .filter(s => visibleStatuses.includes(s.type))
+            .map(s => `${s.type}(${s.value})`)
+            .join(' ');
         this.playerStatusText?.setText(statuses);
 
         this.deckText?.setText(`📚 ${p.deck.length}`);
