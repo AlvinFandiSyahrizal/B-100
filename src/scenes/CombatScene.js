@@ -524,7 +524,7 @@ export class CombatScene extends Phaser.Scene {
             const result = this.combat.playCard(actualIdx, 0);
             if (!result.success) break;
 
-            // Handle phase change event
+            // Handle events
             for (const evt of result.events) {
                 if (evt.type === 'phase_change') {
                     this._showPhaseAnnouncement(evt.announcement);
@@ -537,6 +537,8 @@ export class CombatScene extends Phaser.Scene {
 
         this._refreshQueue();
         this._refreshUI();
+        // Re-render hand agar cost kartu yang tersisa update
+        // (penting setelah Haste/Kutukan Darah mengubah energi/cost)
         this._renderHand();
 
         if (this.combat.isOver) this._handleCombatEnd();

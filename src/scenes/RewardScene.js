@@ -199,13 +199,30 @@ export class RewardScene extends Phaser.Scene {
     // ── Actions ───────────────────────────────────────────────
 
     _pickCard(card) {
-        // Tambah kartu ke deck player
         if (this.playerData) {
+            const totalCards = (this.playerData.deck?.length || 0) +
+                               (this.playerData.discard?.length || 0) +
+                               (this.playerData.hand?.length || 0);
+
+            if (totalCards >= 30) {
+                // Tampilkan pesan deck penuh
+                this._showFeedback('Deck sudah penuh! (max 30 kartu)', '#cc4444');
+                return;
+            }
+
             this.playerData.discard = this.playerData.discard || [];
             this.playerData.discard.push({ ...card });
         }
-        console.log(`[Reward] Picked card: ${card.name}`);
         this._goBack();
+    }
+
+    _showFeedback(msg, color = '#ffffff') {
+        const txt = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 80, msg, {
+            fontFamily: 'monospace', fontSize: '16px',
+            color, fontStyle: 'bold',
+        }).setOrigin(0.5);
+
+        this.time.delayedCall(1500, () => txt.destroy());
     }
 
     create() {

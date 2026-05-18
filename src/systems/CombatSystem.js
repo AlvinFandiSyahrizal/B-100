@@ -73,6 +73,12 @@ export class CombatSystem {
         this.player.energy = ENERGY_PER_TURN;
         this.player.block  = this._keepPersistBlock(this.player);
 
+        // Apply bonus energi dari kartu Tunda turn sebelumnya
+        if (this.player._nextTurnEnergy) {
+            this.player.energy += this.player._nextTurnEnergy;
+            this.player._nextTurnEnergy = 0;
+        }
+
         // Tick status effect player
         this._tickPlayerStatus();
         if (this.player.isDead) {
@@ -80,8 +86,25 @@ export class CombatSystem {
             return;
         }
 
+        // Reset buff sementara per turn
+        this.player._curseReduction = 0;
+        this.player._nextCardFree   = false;
+        this.player._taikoStacks    = 0;
+        this.player._echoActive     = false;
+        this.player._focusActive    = 0;
+
+        // Apply Kutukan Darah cost reduction kalau status aktif
+        const curseCost = this.player.statusEffects?.find(s => s.type === 'curse_cost');
+        if (curseCost) this.player._curseReduction = curseCost.value;
+
         // Draw kartu
-        DeckSystem.draw(this.player, HAND_SIZE);
+        const extraDraw = this.player._nextTurnDraw || 0;
+        this.player._nextTurnDraw = 0;
+        DeckSystem.draw(this.player, HAND_SIZE + extraDraw);
+
+        // Perjanjian Iblis: tarik kartu ekstra tiap turn
+        const perjanjian = this.player.statusEffects?.find(s => s.type === 'extra_draw');
+        if (perjanjian) DeckSystem.draw(this.player, perjanjian.value);
 
         this._addLog(`── Giliran ${this.turn} (Player) ──`);
         this._addLog(`Energi: ${this.player.energy} | HP: ${this.player.hp}/${this.player.stats[STAT.HP_MAX]}`);
@@ -351,26 +374,21 @@ export class CombatSystem {
                     dmg = this.player.hand.length * mult;
                 }
 
-                // Focus buff
-                const focusBuff = this.player.statusEffects?.find(s => s.type === 'focus');
-                if (focusBuff) {
-                    dmg = Math.floor(dmg * (focusBuff.value >= 2 ? 2 : 1.5));
-                    this.player.removeStatus('focus');
-                }
-
-                // Taiko buff
-                const taikoBuff = this.player.statusEffects?.find(s => s.type === 'taiko');
-                if (taikoBuff) dmg += taikoBuff.value;
-
-                // Curse damage bonus
-                if (this.player._damageBonus) {
-                    dmg = Math.floor(dmg * (1 + this.player._damageBonus / 100));
+                // Focus buff — pakai _focusActive bukan status effect
+                if (this.player._focusActive) {
+                    const mult = this.player._focusActive >= 2 ? 2 : 1.5;
+                    dmg = Math.floor(dmg * mult);
+                    this.player._focusActive = 0;  // habis setelah dipakai sekali
                 }
 
                 // Taiko: damage naik sesuai jumlah kartu yang sudah dipakai turn ini
-                const taikoBuff = this.player.statusEffects?.find(s => s.type === 'taiko');
-                if (taikoBuff && this.player._taikoCount > 0) {
-                    dmg += taikoBuff.value * this.player._taikoCount;
+                if (this.player._taikoPerCard && this.player._taikoCount > 0) {
+                    dmg += this.player._taikoPerCard * this.player._taikoCount;
+                }
+
+                // Curse damage bonus (Keserakahan)
+                if (this.player._damageBonus) {
+                    dmg = Math.floor(dmg * (1 + this.player._damageBonus / 100));
                 }
 
                 // Stance attack bonus
@@ -458,25 +476,90 @@ export class CombatSystem {
             }
         }
 
-        // ── Haste: tambah energi ──────────────────────────────
+        // ── Haste: tambah energi LANGSUNG turn ini ────────────
         const hasteBuff = card.effects?.find(e => e.type === 'haste');
         if (hasteBuff) {
             this.player.energy += hasteBuff.value;
             events.push({ type: 'energy_gain', amount: hasteBuff.value });
-            this._addLog(`Haste! +${hasteBuff.value} energi.`);
+            this._addLog(`Haste! +${hasteBuff.value} energi. Total: ${this.player.energy}`);
         }
 
-        // ── Status Effects ke musuh ───────────────────────────
-        if (card.effects && card.effects.length > 0 && target) {
-            for (const effect of card.effects) {
-                if (['haste', 'focus', 'fortify', 'echo', 'taiko'].includes(effect.type)) {
-                    // Efek buff ke player, bukan ke musuh
-                    if (effect.type !== 'haste') {
-                        this.player.addStatus(effect.type, effect.value, effect.duration);
-                        events.push({ type: 'buff_player', status: effect.type, value: effect.value });
-                    }
-                    continue;
-                }
+        // ── Echo: kartu berikutnya dieksekusi 2x ──────────────
+        const echoBuff = card.effects?.find(e => e.type === 'echo');
+        if (echoBuff) {
+            this.player._echoActive = true;
+            events.push({ type: 'buff_player', status: 'echo' });
+            this._addLog(`Echo aktif! Kartu berikutnya akan dieksekusi 2x.`);
+        }
+
+        // ── Focus: kartu berikutnya damage x1.5 atau x2 ──────
+        const focusBuff = card.effects?.find(e => e.type === 'focus');
+        if (focusBuff) {
+            this.player._focusActive = focusBuff.value;
+            events.push({ type: 'buff_player', status: 'focus', value: focusBuff.value });
+            this._addLog(`Focus aktif! Kartu berikutnya damage x${focusBuff.value >= 2 ? 2 : 1.5}.`);
+        }
+
+        // ── Taiko: stack damage counter ───────────────────────
+        const taikoBuff2 = card.effects?.find(e => e.type === 'taiko');
+        if (taikoBuff2) {
+            this.player._taikoPerCard = taikoBuff2.value;
+            events.push({ type: 'buff_player', status: 'taiko', value: taikoBuff2.value });
+            this._addLog(`Taiko aktif! Setiap kartu berikutnya +${taikoBuff2.value} damage.`);
+        }
+
+        // ── Kutukan Darah: cost reduction langsung aktif ──────
+        if (card.isCurse && card.curseBenefit?.costReduction) {
+            this.player._curseReduction = (this.player._curseReduction || 0) + card.curseBenefit.costReduction;
+            // Tambah sebagai status effect biar persist antar turn
+            this.player.addStatus('curse_cost', card.curseBenefit.costReduction, 999);
+            events.push({ type: 'curse_active', benefit: 'cost_reduction', value: card.curseBenefit.costReduction });
+            this._addLog(`Kutukan Darah! Semua kartu cost -${card.curseBenefit.costReduction}.`);
+        }
+
+        // ── Perjanjian Iblis: extra draw per turn ─────────────
+        if (card.isCurse && card.curseBenefit?.extraDraw) {
+            this.player.addStatus('extra_draw', card.curseBenefit.extraDraw, 999);
+            // HP max reduction ditangani saat kartu dipakai
+            const hpReduce = Math.floor(this.player.stats['hp_max'] * (card.curseEffect?.hpMaxReduce || 0) / 100);
+            this.player.hp = Math.max(1, this.player.hp - hpReduce);
+            events.push({ type: 'curse_active', benefit: 'extra_draw' });
+            this._addLog(`Perjanjian Iblis! HP max berkurang, tarik +${card.curseBenefit.extraDraw} kartu tiap turn.`);
+        }
+
+        // ── Keserakahan: damage bonus ─────────────────────────
+        if (card.isCurse && card.curseBenefit?.damageBonus) {
+            this.player.addStatus('damage_bonus', card.curseBenefit.damageBonus, 999);
+            events.push({ type: 'curse_active', benefit: 'damage_bonus', value: card.curseBenefit.damageBonus });
+            this._addLog(`Keserakahan! Damage +${card.curseBenefit.damageBonus}%.`);
+        }
+
+        // ── Pengorbanan: next card free ───────────────────────
+        if (card.nextCardFree) {
+            this.player._nextCardFree = true;
+            // Buang 1 kartu random dari tangan
+            if (this.player.hand.length > 0) {
+                const idx = Math.floor(Math.random() * this.player.hand.length);
+                const sacrificed = this.player.hand.splice(idx, 1)[0];
+                this.player.discard.push(sacrificed);
+                events.push({ type: 'card_sacrificed', card: sacrificed });
+                this._addLog(`Pengorbanan! ${sacrificed.name} dibuang. Kartu berikutnya gratis.`);
+            }
+        }
+
+        // ── Tunda: skip turn, bonus energi next turn ──────────
+        if (card.skipTurn) {
+            this.player._nextTurnEnergy = (this.player._nextTurnEnergy || 0) + (card.nextTurnEnergy || 0);
+            this.player._nextTurnDraw   = (this.player._nextTurnDraw   || 0) + (card.nextTurnDraw   || 0);
+            events.push({ type: 'skip_turn' });
+            this._addLog(`Tunda! Giliran berikutnya +${card.nextTurnEnergy} energi.`);
+            // Langsung end turn
+            DeckSystem.discardHand(this.player);
+            this.turn++;
+            this._startEnemyTurn();
+            const enemyEvents = this._processEnemyTurn();
+            return [...events, ...enemyEvents];
+        }
 
                 // Status ke semua musuh kalau targetAll
                 const statusTargets = card.targetAll
@@ -598,9 +681,36 @@ export class CombatSystem {
 
     // ── Helpers ───────────────────────────────────────────────
 
-    _keepPersistBlock(player) {
-        // Block carry-over kalau ada kartu blockPersist aktif
-        return player._blockPersist ? player.block : 0;
+    /**
+     * Hitung cost efektif kartu setelah buff/curse aktif.
+     * Dipanggil dari CombatScene untuk tampilkan cost yang benar.
+     */
+    getEffectiveCost(card) {
+        let cost = card.cost ?? 0;
+
+        // Kutukan Darah: semua kartu cost -1
+        if (this.player._costReduction) {
+            cost = Math.max(0, cost - this.player._costReduction);
+        }
+
+        // Kartu gratis dari efek tertentu
+        if (this.player._nextCardFree) {
+            cost = 0;
+        }
+
+        return cost;
+    }
+
+    /**
+     * Reset buff sementara di awal giliran baru.
+     */
+    _resetTurnBuffs() {
+        this.player._costReduction  = 0;
+        this.player._nextCardFree   = false;
+        this.player._taikoStacks    = 0;
+        this.player._skipNextTurn   = false;
+        this.player._nextTurnEnergy = 0;
+        this.player._nextTurnDraw   = 0;
     }
 
     _tickPlayerStatus() {
