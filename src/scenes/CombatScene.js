@@ -18,6 +18,7 @@ import { getMiniBoss }                    from '../data/bosses/mini_bosses.js';
 import { STARTER_DECK }                   from '../data/cards/index.js';
 import { LootSystem }                     from '../systems/LootSystem.js';
 import { GameGuard }                      from '../utils/GameGuard.js';
+import { DeckViewerOverlay }              from '../ui/DeckViewerOverlay.js';
 
 export class CombatScene extends Phaser.Scene {
     constructor() {
@@ -248,6 +249,31 @@ export class CombatScene extends Phaser.Scene {
         this.turnText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 10, '', {
             fontFamily: 'monospace', fontSize: '10px', color: '#1a1a33',
         }).setOrigin(0.5);
+
+        // Tombol lihat deck
+        const deckBtn = this.add.rectangle(GAME_WIDTH - 50, GAME_HEIGHT - 30, 80, 22, 0x0d0d1a)
+            .setStrokeStyle(1, 0x1a2233)
+            .setInteractive({ useHandCursor: true })
+            .setDepth(5);
+        const deckBtnTxt = this.add.text(GAME_WIDTH - 50, GAME_HEIGHT - 30, '📋 Deck', {
+            fontFamily: 'monospace', fontSize: '10px', color: '#2a3a4a',
+        }).setOrigin(0.5).setDepth(6);
+
+        deckBtn.on('pointerover', () => { deckBtn.setFillStyle(0x111133); deckBtnTxt.setColor('#6677aa'); });
+        deckBtn.on('pointerout',  () => { deckBtn.setFillStyle(0x0d0d1a); deckBtnTxt.setColor('#2a3a4a'); });
+        deckBtn.on('pointerdown', () => this._openDeckViewer());
+    }
+
+    _openDeckViewer() {
+        const allCards = [
+            ...this.player.deck,
+            ...this.player.hand,
+            ...this.player.discard,
+        ];
+        DeckViewerOverlay.show(this, allCards, {
+            canPurge:   false,
+            canUpgrade: false,
+        });
     }
 
     // ── Action Buttons ────────────────────────────────────────
@@ -414,7 +440,7 @@ export class CombatScene extends Phaser.Scene {
         // Cost
         const costCircle = this.add.circle(x - w/2 + 13, y - h/2 + 13, 11, 0x080810)
             .setStrokeStyle(1, bColor);
-        const costTxt = this.add.text(x - w/2 + 13, y - h/2 + 13, `${card.cost}`, {
+        const costTxt = this.add.text(x - w/2 + 13, y - h/2 + 13, `${cardCost}`, {
             fontFamily: 'monospace', fontSize: '12px',
             color: affordable || inQueue ? '#ffcc44' : '#332211', fontStyle: 'bold',
         }).setOrigin(0.5);

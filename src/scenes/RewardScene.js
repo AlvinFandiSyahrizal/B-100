@@ -3,10 +3,11 @@
 // Menampilkan 3 pilihan kartu, player pilih 1
 // ============================================================
 
-import {
-    SCENE, GAME_WIDTH, GAME_HEIGHT
-} from '../config/constants.js';
-import { getAllCardsArray } from '../data/cards/index.js';
+import { SCENE, GAME_WIDTH, GAME_HEIGHT } from '../config/constants.js';
+import { getAllCardsArray }  from '../data/cards/index.js';
+import { ScalingSystem }    from '../systems/ScalingSystem.js';
+import { LootSystem }       from '../systems/LootSystem.js';
+import { DeckViewerOverlay } from '../ui/DeckViewerOverlay.js';
 import { DeckSystem }       from '../systems/DeckSystem.js';
 
 const CHOICES = 3;  // jumlah kartu yang ditawarkan
@@ -181,19 +182,36 @@ export class RewardScene extends Phaser.Scene {
         const bx = GAME_WIDTH / 2;
         const by = GAME_HEIGHT - 70;
 
-        const bg = this.add.rectangle(bx, by, 180, 40, 0x0d0d1a)
-            .setStrokeStyle(1, 0x222233)
+        // Tombol lihat deck
+        const viewBg = this.add.rectangle(bx - 130, by, 160, 36, 0x0d1a0d)
+            .setStrokeStyle(1, 0x1a3322)
             .setInteractive({ useHandCursor: true });
-
-        const txt = this.add.text(bx, by, 'Skip — tidak ambil kartu', {
-            fontFamily: 'monospace',
-            fontSize:   '12px',
-            color:      '#334455',
+        const viewTxt = this.add.text(bx - 130, by, '📋 Lihat Deck', {
+            fontFamily: 'monospace', fontSize: '12px', color: '#336633',
         }).setOrigin(0.5);
 
-        bg.on('pointerover', () => txt.setColor('#556677'));
-        bg.on('pointerout',  () => txt.setColor('#334455'));
-        bg.on('pointerdown', () => this._goBack());
+        viewBg.on('pointerover', () => { viewBg.setFillStyle(0x0d2a0d); viewTxt.setColor('#44cc44'); });
+        viewBg.on('pointerout',  () => { viewBg.setFillStyle(0x0d1a0d); viewTxt.setColor('#336633'); });
+        viewBg.on('pointerdown', () => {
+            const all = [
+                ...(this.playerData?.deck    || []),
+                ...(this.playerData?.discard || []),
+                ...(this.playerData?.hand    || []),
+            ];
+            DeckViewerOverlay.show(this, all);
+        });
+
+        // Tombol skip
+        const skipBg = this.add.rectangle(bx + 80, by, 180, 36, 0x0d0d1a)
+            .setStrokeStyle(1, 0x222233)
+            .setInteractive({ useHandCursor: true });
+        const skipTxt = this.add.text(bx + 80, by, 'Skip — tidak ambil kartu', {
+            fontFamily: 'monospace', fontSize: '12px', color: '#334455',
+        }).setOrigin(0.5);
+
+        skipBg.on('pointerover', () => skipTxt.setColor('#556677'));
+        skipBg.on('pointerout',  () => skipTxt.setColor('#334455'));
+        skipBg.on('pointerdown', () => this._goBack());
     }
 
     // ── Actions ───────────────────────────────────────────────

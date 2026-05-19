@@ -3,13 +3,13 @@
 // Beli kartu, jual kartu, purge kartu dari deck
 // ============================================================
 
-import {
-    SCENE, GAME_WIDTH, GAME_HEIGHT
-} from '../config/constants.js';
-import { getAllCardsArray } from '../data/cards/index.js';
+import { SCENE, GAME_WIDTH, GAME_HEIGHT } from '../config/constants.js';
+import { getAllCardsArray }   from '../data/cards/index.js';
+import { DeckViewerOverlay }  from '../ui/DeckViewerOverlay.js';
 
-const SHOP_CARD_COUNT  = 4;   // kartu yang dijual di shop
-const PURGE_COST       = 50;  // gold untuk hapus 1 kartu dari deck
+const SHOP_CARD_COUNT = 4;
+const PURGE_COST      = 50;
+const MAX_DECK        = 30;
 
 export class ShopScene extends Phaser.Scene {
     constructor() {
@@ -167,40 +167,92 @@ export class ShopScene extends Phaser.Scene {
         g.moveTo(60, py - 20); g.lineTo(GAME_WIDTH - 60, py - 20);
         g.strokePath();
 
-        this.add.text(80, py, 'PURGE KARTU', {
-            fontFamily: 'monospace',
-            fontSize:   '11px',
-            color:      '#334455',
-            letterSpacing: 2,
+        this.add.text(80, py, 'KELOLA DECK', {
+            fontFamily: 'monospace', fontSize: '11px',
+            color: '#334455', letterSpacing: 2,
         });
 
-        this.add.text(80, py + 22, `Hapus 1 kartu dari deckmu seharga 💰 ${PURGE_COST}. Deck yang ramping, deck yang kuat.`, {
-            fontFamily: 'monospace',
-            fontSize:   '10px',
-            color:      '#2a3a4a',
-            wordWrap:   { width: GAME_WIDTH - 280 },
+        this.add.text(80, py + 22,
+            `Total kartu: ${this._totalCards()}  /  30    |    Purge: buang 1 kartu seharga 💰 ${PURGE_COST}`, {
+            fontFamily: 'monospace', fontSize: '10px', color: '#2a3a4a',
         });
 
+        // Tombol Lihat Deck
+        const viewBg = this.add.rectangle(GAME_WIDTH - 250, py + 22, 140, 36, 0x0d1a0d)
+            .setStrokeStyle(1, 0x1a3322)
+            .setInteractive({ useHandCursor: true });
+        const viewTxt = this.add.text(GAME_WIDTH - 250, py + 22, '📋 Lihat Deck', {
+            fontFamily: 'monospace', fontSize: '12px', color: '#336633',
+        }).setOrigin(0.5);
+
+        viewBg.on('pointerover', () => { viewBg.setFillStyle(0x0d2a0d); viewTxt.setColor('#44cc44'); });
+        viewBg.on('pointerout',  () => { viewBg.setFillStyle(0x0d1a0d); viewTxt.setColor('#336633'); });
+        viewBg.on('pointerdown', () => this._openDeckViewer());
+
+        // Tombol Purge
         const canPurge = this.gold >= PURGE_COST;
-        const pbg = this.add.rectangle(GAME_WIDTH - 120, py + 22, 140, 36, 0x0d0d1a)
+        const pbg = this.add.rectangle(GAME_WIDTH - 90, py + 22, 140, 36, 0x0d0d1a)
             .setStrokeStyle(1, canPurge ? 0x442233 : 0x1a1a22);
 
         if (canPurge) pbg.setInteractive({ useHandCursor: true });
 
-        const ptxt = this.add.text(GAME_WIDTH - 120, py + 22, `Purge  💰 ${PURGE_COST}`, {
-            fontFamily: 'monospace',
-            fontSize:   '12px',
-            color:      canPurge ? '#884466' : '#222233',
+        const ptxt = this.add.text(GAME_WIDTH - 90, py + 22, `Purge  💰 ${PURGE_COST}`, {
+            fontFamily: 'monospace', fontSize: '12px',
+            color: canPurge ? '#884466' : '#222233',
         }).setOrigin(0.5);
 
         if (canPurge) {
             pbg.on('pointerover', () => { pbg.setFillStyle(0x1a0d1a); ptxt.setColor('#cc6699'); });
             pbg.on('pointerout',  () => { pbg.setFillStyle(0x0d0d1a); ptxt.setColor('#884466'); });
-            pbg.on('pointerdown', () => {
-                // Phase 2 Step 6: koneksi ke deck player
-                console.log('[Shop] Purge card — belum dikoneksi ke player');
-            });
+            pbg.on('pointerdown', () => this._openPurgeViewer());
         }
+    }
+
+    _totalCards() {
+        return (this.playerData?.deck?.length    || 0) +
+               (this.playerData?.discard?.length || 0) +
+               (this.playerData?.hand?.length    || 0);
+    }
+
+    _openDeckViewer() {
+        const allCards = [
+            ...(this.playerData?.deck    || []),
+            ...(this.playerData?.discard || []),
+            ...(this.playerData?.hand    || []),
+        ];
+        DeckViewerOverlay.show(this, allCards, { canPurge: false, canUpgrade: false });
+    }
+
+    _openPurgeViewer() {
+        const allCards = [
+            ...(this.playerData?.deck    || []),
+            ...(this.playerData?.discard || []),
+        ];
+        DeckViewerOverlay.show(this, allCards, {
+            canPurge:   true,
+            purgePrice: PURGE_COST,
+            onPurge: (card) => {
+                // Kurangi gold
+                this.gold -= PURGE_COST;
+                if (this.playerData) this.playerData.gold = this.gold;
+                this.goldText?.setText(`💰 ${this.gold}`);
+
+                // Hapus kartu dari deck/discard
+                const deck = this.playerData?.deck || [];
+                const disc = this.playerData?.discard || [];
+                let idx = deck.findIndex(c => c.id === card.id);
+                if (idx !== -1) { deck.splice(idx, 1); }
+                else {
+                    idx = disc.findIndex(c => c.id === card.id);
+                    if (idx !== -1) disc.splice(idx, 1);
+                }
+
+                this._showNotif(`${card.name} dibuang dari deck.`, '#cc6666');
+
+                // Buka ulang purge viewer dengan deck yang sudah diupdate
+                this.time.delayedCall(300, () => this._openPurgeViewer());
+            },
+        });
     }
 
     _buildLeaveButton() {
@@ -225,14 +277,21 @@ export class ShopScene extends Phaser.Scene {
     // ── Actions ───────────────────────────────────────────────
 
     _buyCard(item, index, priceTxt, bg) {
+        // Cek deck penuh
+        const totalCards = (this.playerData?.deck?.length    || 0) +
+                           (this.playerData?.discard?.length || 0) +
+                           (this.playerData?.hand?.length    || 0);
+
+        if (totalCards >= MAX_DECK) {
+            this._showNotif('Deck sudah penuh! (max 30)', '#cc4444');
+            return;
+        }
+
         this.gold -= item.price;
         item.sold  = true;
 
-        // Update gold di playerData
         if (this.playerData) {
             this.playerData.gold = this.gold;
-
-            // Tambah kartu ke discard pile player
             this.playerData.discard = this.playerData.discard || [];
             this.playerData.discard.push({ ...item.card });
         }
@@ -240,8 +299,15 @@ export class ShopScene extends Phaser.Scene {
         this.goldText.setText(`💰 ${this.gold}`);
         priceTxt.setText('TERJUAL').setColor('#222233');
         bg.setFillStyle(0x0a0a10).setStrokeStyle(1, 0x1a1a22).disableInteractive();
+    }
 
-        console.log(`[Shop] Bought: ${item.card.name} for ${item.price} gold`);
+    _showNotif(msg, color = '#ffffff') {
+        const txt = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20, msg, {
+            fontFamily: 'monospace', fontSize: '16px',
+            color, fontStyle: 'bold',
+            backgroundColor: '#0a0a14', padding: { x: 10, y: 6 },
+        }).setOrigin(0.5).setDepth(10);
+        this.time.delayedCall(2000, () => txt.destroy());
     }
 
     _leave() {

@@ -3,9 +3,8 @@
 // Player bisa pilih: heal HP atau upgrade 1 kartu di deck
 // ============================================================
 
-import {
-    SCENE, GAME_WIDTH, GAME_HEIGHT, STAT
-} from '../config/constants.js';
+import { SCENE, GAME_WIDTH, GAME_HEIGHT, STAT } from '../config/constants.js';
+import { DeckViewerOverlay } from '../ui/DeckViewerOverlay.js';
 import { DeckSystem } from '../systems/DeckSystem.js';
 
 const HEAL_PERCENT = 0.30;  // heal 30% dari HP max
@@ -174,69 +173,49 @@ export class RestScene extends Phaser.Scene {
     _doUpgrade() {
         this.actionTaken = true;
 
-        // Tampilkan list kartu di deck untuk dipilih
-        if (this.playerData) {
-            const allCards = [
-                ...(this.playerData.deck    || []),
-                ...(this.playerData.discard || []),
-            ].filter(c => c.upgradedId);  // hanya kartu yang punya versi upgrade
-
-            if (allCards.length === 0) {
-                this._showFeedback('Tidak ada kartu yang bisa diupgrade.', '#cc4444');
-                this.time.delayedCall(1200, () => this._leave());
-                return;
-            }
-
-            this._showUpgradePicker(allCards);
-        } else {
-            this._showFeedback('⬆️  Kartu diupgrade!', '#4488cc');
+        if (!this.playerData) {
+            this._showFeedback('Tidak ada data player.', '#cc4444');
             this.time.delayedCall(1200, () => this._leave());
+            return;
         }
-    }
 
-    _showUpgradePicker(cards) {
-        // Panel pilih kartu
-        const panelY = GAME_HEIGHT / 2 + 130;
+        const allCards = [
+            ...(this.playerData.deck    || []),
+            ...(this.playerData.discard || []),
+        ].filter(c => c.upgradedId);
 
-        this.add.text(GAME_WIDTH / 2, panelY - 30, 'Pilih kartu yang mau di-upgrade:', {
-            fontFamily: 'monospace', fontSize: '13px', color: '#667788',
-        }).setOrigin(0.5);
+        if (allCards.length === 0) {
+            this._showFeedback('Tidak ada kartu yang bisa diupgrade.', '#cc4444');
+            this.time.delayedCall(1200, () => this._leave());
+            return;
+        }
 
-        const maxShow = Math.min(cards.length, 5);
-        const spacing = 160;
-        const startX  = GAME_WIDTH / 2 - ((maxShow - 1) * spacing) / 2;
+        DeckViewerOverlay.show(this, allCards, {
+            canUpgrade: true,
+            onUpgrade: (card) => {
+                if (!card.upgradedId) return;
 
-        cards.slice(0, maxShow).forEach((card, i) => {
-            const x  = startX + i * spacing;
-            const bg = this.add.rectangle(x, panelY + 30, 140, 50, 0x111122)
-                .setStrokeStyle(1, 0x334455)
-                .setInteractive({ useHandCursor: true });
+                const deck = this.playerData.deck    || [];
+                const disc = this.playerData.discard || [];
 
-            this.add.text(x, panelY + 22, card.name, {
-                fontFamily: 'monospace', fontSize: '10px', color: '#aabbcc',
-                align: 'center', wordWrap: { width: 130 },
-            }).setOrigin(0.5);
-
-            this.add.text(x, panelY + 40, `→ ${card.upgradedId?.replace(/_/g, ' ')}`, {
-                fontFamily: 'monospace', fontSize: '9px', color: '#44aa44',
-            }).setOrigin(0.5);
-
-            bg.on('pointerover', () => bg.setFillStyle(0x1a1a33));
-            bg.on('pointerout',  () => bg.setFillStyle(0x111122));
-            bg.on('pointerdown', () => {
-                // Upgrade kartu di playerData
-                const inDeck = this.playerData.deck?.findIndex(c => c.id === card.id);
-                if (inDeck !== undefined && inDeck >= 0 && card.upgradedId) {
-                    this.playerData.deck[inDeck] = { ...card, id: card.upgradedId };
+                // Cari di deck dulu
+                let idx = deck.findIndex(c => c.id === card.id);
+                if (idx !== -1) {
+                    deck[idx] = { ...deck[idx], id: card.upgradedId, isUpgraded: true, upgradedId: null };
                 } else {
-                    const inDiscard = this.playerData.discard?.findIndex(c => c.id === card.id);
-                    if (inDiscard >= 0 && card.upgradedId) {
-                        this.playerData.discard[inDiscard] = { ...card, id: card.upgradedId };
+                    // Cari di discard
+                    idx = disc.findIndex(c => c.id === card.id);
+                    if (idx !== -1) {
+                        disc[idx] = { ...disc[idx], id: card.upgradedId, isUpgraded: true, upgradedId: null };
                     }
                 }
-                this._showFeedback(`⬆️  ${card.name} diupgrade!`, '#4488cc');
-                this.time.delayedCall(1000, () => this._leave());
-            });
+
+                this._showFeedback(`⬆️  ${card.name} diupgrade!`, '#44cc88');
+                this.time.delayedCall(1200, () => this._leave());
+            },
+            onClose: () => {
+                this.actionTaken = false;
+            },
         });
     }
 
