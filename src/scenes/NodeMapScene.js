@@ -7,6 +7,7 @@ import { SCENE, GAME_WIDTH, GAME_HEIGHT, NODE_TYPE } from '../config/constants.j
 import { NodeMapGenerator } from '../systems/NodeMapGenerator.js';
 import { SaveSystem }       from '../storage/SaveSystem.js';
 import { GameGuard }        from '../utils/GameGuard.js';
+import { DeckViewerOverlay } from '../ui/DeckViewerOverlay.js';
 
 const MAP_START_X = 100;
 const MAP_END_X   = GAME_WIDTH - 100;
@@ -324,17 +325,47 @@ export class NodeMapScene extends Phaser.Scene {
     // ── Menu Button ───────────────────────────────────────────
 
     _buildMenuButton() {
-        const bg = this.add.rectangle(GAME_WIDTH - 50, 28, 70, 26, 0x0d0d1a)
+        // Tombol Menu (kanan atas)
+        const menuBg = this.add.rectangle(GAME_WIDTH - 50, 28, 70, 26, 0x0d0d1a)
             .setStrokeStyle(1, 0x222233)
             .setInteractive({ useHandCursor: true });
-
-        const txt = this.add.text(GAME_WIDTH - 50, 28, '☰ Menu', {
+        const menuTxt = this.add.text(GAME_WIDTH - 50, 28, '☰ Menu', {
             fontFamily: 'monospace', fontSize: '11px', color: '#334455',
         }).setOrigin(0.5);
 
-        bg.on('pointerover', () => { bg.setFillStyle(0x1a1a2e); txt.setColor('#6677aa'); });
-        bg.on('pointerout',  () => { bg.setFillStyle(0x0d0d1a); txt.setColor('#334455'); });
-        bg.on('pointerdown', () => this._openPauseMenu());
+        menuBg.on('pointerover', () => { menuBg.setFillStyle(0x1a1a2e); menuTxt.setColor('#6677aa'); });
+        menuBg.on('pointerout',  () => { menuBg.setFillStyle(0x0d0d1a); menuTxt.setColor('#334455'); });
+        menuBg.on('pointerdown', () => {
+            if (this._pauseOpen) this._closePauseMenu();
+            else this._openPauseMenu();
+        });
+
+        // Tombol Deck (kiri atas, di sebelah kanan info HP)
+        const deckBg = this.add.rectangle(130, 28, 90, 26, 0x0d1a0d)
+            .setStrokeStyle(1, 0x1a3322)
+            .setInteractive({ useHandCursor: true });
+        const deckTxt = this.add.text(130, 28, '📋 Deck', {
+            fontFamily: 'monospace', fontSize: '11px', color: '#336633',
+        }).setOrigin(0.5);
+
+        deckBg.on('pointerover', () => { deckBg.setFillStyle(0x0d2a0d); deckTxt.setColor('#44cc44'); });
+        deckBg.on('pointerout',  () => { deckBg.setFillStyle(0x0d1a0d); deckTxt.setColor('#336633'); });
+        deckBg.on('pointerdown', () => this._openDeckViewer());
+    }
+
+    _openDeckViewer() {
+        const allCards = [
+            ...(this.playerData?.deck    || []),
+            ...(this.playerData?.discard || []),
+            ...(this.playerData?.hand    || []),
+        ];
+
+        if (allCards.length === 0) return;
+
+        DeckViewerOverlay.show(this, allCards, {
+            canPurge:   false,
+            canUpgrade: false,
+        });
     }
 
     // ── Pause Menu ────────────────────────────────────────────
