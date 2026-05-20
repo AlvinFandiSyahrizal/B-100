@@ -529,8 +529,8 @@ export class NodeMapScene extends Phaser.Scene {
                 this.scene.start(SCENE.REST, sceneData);
                 break;
 
-            case NODE_TYPE.EVENT:
-                this.scene.start(SCENE.EVENT, sceneData);
+            case NODE_TYPE.SHRINE:
+                this.scene.start(SCENE.SHRINE, sceneData);
                 break;
 
             case NODE_TYPE.TREASURE:

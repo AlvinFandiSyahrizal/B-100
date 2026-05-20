@@ -4,7 +4,6 @@
 
 import { GAME_WIDTH, GAME_HEIGHT, SCENE } from './constants.js';
 
-// Import semua scene
 import { BootScene }            from '../scenes/BootScene.js';
 import { PreloadScene }         from '../scenes/PreloadScene.js';
 import { MainMenuScene }        from '../scenes/MainMenuScene.js';
@@ -17,6 +16,7 @@ import { RestScene }            from '../scenes/RestScene.js';
 import { BossIntroScene }       from '../scenes/BossIntroScene.js';
 import { VictoryScene }         from '../scenes/VictoryScene.js';
 import { EventScene }           from '../scenes/EventScene.js';
+import { ShrineScene }          from '../scenes/ShrineScene.js';
 
 // Nanti scene lain ditambahkan di sini sesuai phase
 
@@ -42,7 +42,6 @@ export const gameConfig = {
         },
     },
 
-    // Semua scene yang terdaftar — urutan pertama = yang dijalankan pertama
     scene: [
         BootScene,
         PreloadScene,
@@ -56,10 +55,6 @@ export const gameConfig = {
         VictoryScene,
         GameOverScene,
         EventScene,
-        // Phase 2 nanti tambah:
-        // NodeMapScene, EventScene, ShopScene, RestScene,
-        // BossIntroScene, RewardScene,
-        // Phase 3+:
-        // CharacterSelectScene, VictoryScene, MetaScene,
+        ShrineScene,
     ],
 };

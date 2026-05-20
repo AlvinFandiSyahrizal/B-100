@@ -94,10 +94,11 @@ export const NODE_TYPE = {
 export const NODE_WEIGHTS = {
     combat:   35,
     elite:    15,
-    shop:     15,
+    shop:     12,
     rest:     10,
     event:    15,
-    treasure: 10,
+    treasure: 8,
+    shrine:   5,
 };
 // Boss selalu di ujung, tidak masuk pool acak
 
@@ -218,5 +219,5 @@ export const SCENE = {
     REWARD:    'RewardScene',
     GAME_OVER: 'GameOverScene',
     VICTORY:   'VictoryScene',
-    META:      'MetaScene',
+    SHRINE:    'ShrineScene',
 };
