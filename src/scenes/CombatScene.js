@@ -19,6 +19,7 @@ import { STARTER_DECK }                   from '../data/cards/index.js';
 import { LootSystem }                     from '../systems/LootSystem.js';
 import { GameGuard }                      from '../utils/GameGuard.js';
 import { DeckViewerOverlay }              from '../ui/DeckViewerOverlay.js';
+import { DamageNumber }                   from '../ui/DamageNumber.js';
 
 export class CombatScene extends Phaser.Scene {
     constructor() {
@@ -73,15 +74,20 @@ export class CombatScene extends Phaser.Scene {
             const bossData = getBossForZone(this.zone);
             this.monsters  = [ new Monster(bossData, this.floor) ];
         } else if (this.isMini) {
-            // Mini boss — penjaga akhir tiap lantai
             const floorInZone = ((this.floor - 1) % 10) + 1;
             const miniData    = getMiniBoss(floorInZone, this.zone);
             this.monsters     = [ new Monster(miniData, this.floor) ];
         } else {
-            const pool        = getZoneMonsterPool(this.zone);
-            const monsterId   = pool[Math.floor(Math.random() * pool.length)];
-            const monsterData = getMonster(monsterId) || getMonster('kappa');
-            this.monsters     = [ new Monster(monsterData, this.floor) ];
+            // Combat biasa: 1-3 monster, elite selalu 2
+            const pool      = getZoneMonsterPool(this.zone);
+            const count     = this.isElite ? 2 : Phaser.Math.Between(1, 3);
+            this.monsters   = [];
+
+            for (let i = 0; i < count; i++) {
+                const id   = pool[Math.floor(Math.random() * pool.length)];
+                const data = getMonster(id) || getMonster('kappa');
+                this.monsters.push(new Monster(data, this.floor));
+            }
         }
 
         this.combat = new CombatSystem(this.player, this.monsters);
@@ -90,6 +96,7 @@ export class CombatScene extends Phaser.Scene {
         // Build UI
         this._buildBackground();
         this._buildMonsterArea();
+        this._saveMonsterPositions();
         this._buildPlayerArea();
         this._buildQueueArea();
         this._buildHUD();
@@ -178,7 +185,13 @@ export class CombatScene extends Phaser.Scene {
 
     // ── Player Area ───────────────────────────────────────────
 
-    _buildPlayerArea() {
+    _saveMonsterPositions() {
+        this.nodePositions = {};
+        this.monsterSprites.forEach((spr, i) => {
+            if (spr) this.nodePositions[i] = { x: spr.x, y: spr.y };
+        });
+    }
+        _buildPlayerArea() {
         const px = 155, py = GAME_HEIGHT - 210;
 
         this.add.image(px, py - 95, 'player').setScale(3).setOrigin(0.5);
@@ -550,12 +563,8 @@ export class CombatScene extends Phaser.Scene {
             const result = this.combat.playCard(actualIdx, 0);
             if (!result.success) break;
 
-            // Handle events
-            for (const evt of result.events) {
-                if (evt.type === 'phase_change') {
-                    this._showPhaseAnnouncement(evt.announcement);
-                }
-            }
+            // Tampilkan damage numbers dan efek visual
+            this._handleCombatEvents(result.events);
         }
 
         this.selectedQueue   = [];
@@ -563,15 +572,97 @@ export class CombatScene extends Phaser.Scene {
 
         this._refreshQueue();
         this._refreshUI();
-        // Re-render hand agar cost kartu yang tersisa update
-        // (penting setelah Haste/Kutukan Darah mengubah energi/cost)
         this._renderHand();
 
         if (this.combat.isOver) this._handleCombatEnd();
     }
 
-    _showPhaseAnnouncement(text) {
+    _handleCombatEvents(events) {
+        if (!events || events.length === 0) return;
+
+        for (const evt of events) {
+            switch (evt.type) {
+
+                case 'damage': {
+                    const pos = this._getTargetPos(evt.target);
+                    if (pos) {
+                        DamageNumber.show(this, pos.x, pos.y - 40,
+                            evt.amount, evt.damageType || 'physical');
+                    }
+                    break;
+                }
+
+                case 'heal': {
+                    const px = this._getPlayerPos();
+                    DamageNumber.show(this, px.x, px.y - 40, evt.amount, 'heal');
+                    break;
+                }
+
+                case 'block': {
+                    const px = this._getPlayerPos();
+                    DamageNumber.show(this, px.x, px.y - 20, evt.amount, 'block');
+                    break;
+                }
+
+                case 'dodge': {
+                    const pos = evt.target === 'player'
+                        ? this._getPlayerPos()
+                        : this._getTargetPos(evt.target);
+                    if (pos) DamageNumber.show(this, pos.x, pos.y - 40, 0, 'miss');
+                    break;
+                }
+
+                case 'execute': {
+                    const pos = this._getTargetPos(evt.target);
+                    if (pos) DamageNumber.show(this, pos.x, pos.y - 40, 0, 'execute');
+                    break;
+                }
+
+                case 'echo_triggered': {
+                    const px = this._getPlayerPos();
+                    DamageNumber.show(this, px.x, px.y - 60, 0, 'echo');
+                    break;
+                }
+
+                case 'phase_change': {
+                    if (evt.announcement) this._showPhaseAnnouncement(evt.announcement);
+                    const pos = this._getTargetPos(evt.monsterId);
+                    if (pos) DamageNumber.show(this, pos.x, pos.y - 40,
+                        evt.phaseIndex || 2, 'phase');
+                    break;
+                }
+
+                case 'apply_status': {
+                    const pos = evt.target === 'player'
+                        ? this._getPlayerPos()
+                        : this._getTargetPos(evt.target);
+                    if (pos) DamageNumber.showStatus(
+                        this, pos.x, pos.y - 20, evt.status, evt.value);
+                    break;
+                }
+
+                case 'energy_gain': {
+                    const px = this._getPlayerPos();
+                    DamageNumber.show(this, px.x + 40, px.y, evt.amount, 'block');
+                    break;
+                }
+            }
+        }
+    }
+
+    _getTargetPos(targetId) {
+        if (!targetId) return null;
+        if (targetId === 'player') return this._getPlayerPos();
+        const idx = this.monsters.findIndex(m => m.id === targetId);
+        if (idx === -1) return null;
+        return this.nodePositions?.[idx] || null;
+    }
+
+    _getPlayerPos() {
+        return { x: 160, y: this.cameras.main.height - 240 };
+    }
         // Overlay gelap sebentar
+        _showPhaseAnnouncement(text) {
         const overlay = this.add.rectangle(
             GAME_WIDTH / 2, GAME_HEIGHT / 2,
             GAME_WIDTH, GAME_HEIGHT,
@@ -613,7 +704,8 @@ export class CombatScene extends Phaser.Scene {
     _doEndTurn() {
         if (this.combat.state !== COMBAT_STATE.PLAYER_TURN) return;
         this._clearQueue();
-        this.combat.endPlayerTurn();
+        const events = this.combat.endPlayerTurn();
+        this._handleCombatEvents(events);
         this._refreshUI();
         this._renderHand();
         if (this.combat.isOver) this._handleCombatEnd();
