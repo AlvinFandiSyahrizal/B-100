@@ -47,6 +47,7 @@ export class NodeMapScene extends Phaser.Scene {
         this.zone        = data.zone        || 1;
         this.floor       = data.floor       || 1;
         this.curseLevel  = data.curseLevel  || 1;
+        this.playerName  = data.playerName  || 'Samurai';
         this.playerData  = data.playerData  || null;
 
         // Tentukan apakah lantai ini adalah boss besar
@@ -501,6 +502,7 @@ export class NodeMapScene extends Phaser.Scene {
             zone:          this.zone,
             floor:         this.floor,
             curseLevel:    this.curseLevel,
+            playerName:    this.playerName,
             playerData:    this.playerData,
             mapData:       this.mapData,
             currentNodeId: this.currentNodeId,

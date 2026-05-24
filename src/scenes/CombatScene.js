@@ -146,12 +146,31 @@ export class CombatScene extends Phaser.Scene {
         this.monsterHpTexts      = [];
         this.monsterIntentIcons  = [];
         this.monsterIntentLabels = [];
+        this.monsterStatusTexts  = [];  // status effect icons
+        this.monsterTargetRings  = [];  // ring target selection
+        this.selectedTarget      = 0;   // index monster yang ditarget
 
         const startX = GAME_WIDTH / 2;
+        const spacing = Math.min(240, (GAME_WIDTH - 200) / Math.max(this.monsters.length, 1));
 
         this.monsters.forEach((monster, i) => {
-            const x = startX + (i - (this.monsters.length - 1) / 2) * 240;
+            const x = startX + (i - (this.monsters.length - 1) / 2) * spacing;
             const y = 220;
+
+            // Target ring — lingkaran kuning saat monster ini dipilih
+            const ring = this.add.circle(x, y, 48, 0x000000, 0)
+                .setStrokeStyle(i === 0 ? 3 : 0, 0xffcc44)
+                .setInteractive({ useHandCursor: true });
+            ring.on('pointerdown', () => this._selectTarget(i));
+            ring.on('pointerover', () => {
+                if (i !== this.selectedTarget && !this.monsters[i]?.isDead) {
+                    ring.setStrokeStyle(1, 0x886600);
+                }
+            });
+            ring.on('pointerout', () => {
+                if (i !== this.selectedTarget) ring.setStrokeStyle(0, 0x000000);
+            });
+            this.monsterTargetRings.push(ring);
 
             const spr = this.add.image(x, y, 'monster_basic').setScale(3).setOrigin(0.5);
             this.monsterSprites.push(spr);
@@ -170,6 +189,13 @@ export class CombatScene extends Phaser.Scene {
                 fontFamily: 'monospace', fontSize: '12px', color: '#cc8833',
             }).setOrigin(0.5);
 
+            // Status effect icons (di bawah nama)
+            const statusTxt = this.add.text(x, y + 116, '', {
+                fontFamily: 'monospace', fontSize: '9px', color: '#aabbcc',
+                align: 'center', wordWrap: { width: 140 },
+            }).setOrigin(0.5);
+            this.monsterStatusTexts.push(statusTxt);
+
             // Intent
             const intentIcon = this.add.text(x, y - 90, '', {
                 fontFamily: 'monospace', fontSize: '22px',
@@ -183,6 +209,16 @@ export class CombatScene extends Phaser.Scene {
         });
     }
 
+    _selectTarget(index) {
+        if (this.monsters[index]?.isDead) return;
+        this.selectedTarget = index;
+
+        // Update visual ring
+        this.monsterTargetRings.forEach((ring, i) => {
+            ring.setStrokeStyle(i === index ? 3 : 0, 0xffcc44);
+        });
+    }
+
     // ── Player Area ───────────────────────────────────────────
 
     _saveMonsterPositions() {
@@ -191,7 +227,8 @@ export class CombatScene extends Phaser.Scene {
             if (spr) this.nodePositions[i] = { x: spr.x, y: spr.y };
         });
     }
-        _buildPlayerArea() {
+
+    _buildPlayerArea() {
         const px = 155, py = GAME_HEIGHT - 210;
 
         this.add.image(px, py - 95, 'player').setScale(3).setOrigin(0.5);
@@ -557,14 +594,25 @@ export class CombatScene extends Phaser.Scene {
         if (this.selectedQueue.length === 0) return;
         if (this.combat.state !== COMBAT_STATE.PLAYER_TURN) return;
 
+        // Auto-select target yang masih hidup
+        if (this.monsters[this.selectedTarget]?.isDead) {
+            const alive = this.monsters.findIndex(m => !m.isDead);
+            if (alive !== -1) this._selectTarget(alive);
+        }
+
         for (const { card } of this.selectedQueue) {
             const actualIdx = this.player.hand.indexOf(card);
             if (actualIdx === -1) continue;
-            const result = this.combat.playCard(actualIdx, 0);
+            const result = this.combat.playCard(actualIdx, this.selectedTarget);
             if (!result.success) break;
 
-            // Tampilkan damage numbers dan efek visual
             this._handleCombatEvents(result.events);
+
+            // Auto-switch target kalau target mati
+            if (this.monsters[this.selectedTarget]?.isDead) {
+                const alive = this.monsters.findIndex(m => !m.isDead);
+                if (alive !== -1) this._selectTarget(alive);
+            }
         }
 
         this.selectedQueue   = [];
@@ -661,8 +709,9 @@ export class CombatScene extends Phaser.Scene {
     _getPlayerPos() {
         return { x: 160, y: this.cameras.main.height - 240 };
     }
+    
+    _showPhaseAnnouncement(text) {
         // Overlay gelap sebentar
-        _showPhaseAnnouncement(text) {
         const overlay = this.add.rectangle(
             GAME_WIDTH / 2, GAME_HEIGHT / 2,
             GAME_WIDTH, GAME_HEIGHT,
@@ -725,11 +774,11 @@ export class CombatScene extends Phaser.Scene {
         const remainEnergy = p.energy - this.queueEnergyCost;
         this.energyText?.setText(`⚡ ${remainEnergy} / ${ENERGY_PER_TURN}`);
 
-        // Status effects — hanya tampil yang relevan untuk player
-        const visibleStatuses = ['burn', 'poison', 'bleed', 'stun', 'freeze', 'chill', 'wet', 'dodge', 'fortify'];
+        // Status effects player dengan icon
+        const visibleStatuses = ['burn','poison','bleed','stun','freeze','chill','wet','dodge','fortify'];
         const statuses = (p.statusEffects || [])
             .filter(s => visibleStatuses.includes(s.type))
-            .map(s => `${s.type}(${s.value})`)
+            .map(s => `${_statusIcon(s.type)}${s.value}(${s.duration}t)`)
             .join(' ');
         this.playerStatusText?.setText(statuses);
 
@@ -749,6 +798,8 @@ export class CombatScene extends Phaser.Scene {
                 this.monsterHpTexts[i]?.setText('');
                 this.monsterIntentIcons[i]?.setText('');
                 this.monsterIntentLabels[i]?.setText('');
+                this.monsterStatusTexts?.[i]?.setText('');
+                this.monsterTargetRings?.[i]?.setStrokeStyle(0, 0x000000);
                 return;
             }
             const hpPct = monster.hp / monster.maxHP;
@@ -761,8 +812,17 @@ export class CombatScene extends Phaser.Scene {
             this.monsterIntentLabels[i].setText(
                 intentData?.damage ? `${intentData.damage} dmg` : intentData?.intent || ''
             );
+
+            // Status effect icons di monster
+            if (this.monsterStatusTexts?.[i]) {
+                const statusStr = (monster.statusEffects || [])
+                    .map(s => `${_statusIcon(s.type)}${s.value}(${s.duration}t)`)
+                    .join(' ');
+                this.monsterStatusTexts[i].setText(statusStr);
+            }
         });
     }
+    
 
     // ── Menu Button & Pause Menu ──────────────────────────────
 
@@ -927,4 +987,20 @@ export class CombatScene extends Phaser.Scene {
             });
         }
     }
+}
+
+// ── Helper di luar class ──────────────────────────────────────
+function _statusIcon(type) {
+    const icons = {
+        burn:    '🔥',
+        poison:  '☠',
+        bleed:   '🩸',
+        stun:    '⚡',
+        freeze:  '❄',
+        chill:   '❄',
+        wet:     '💧',
+        dodge:   '💨',
+        fortify: '🏰',
+    };
+    return icons[type] || '●';
 }

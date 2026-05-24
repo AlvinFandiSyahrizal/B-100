@@ -17,6 +17,7 @@ import { BossIntroScene }       from '../scenes/BossIntroScene.js';
 import { VictoryScene }         from '../scenes/VictoryScene.js';
 import { EventScene }           from '../scenes/EventScene.js';
 import { ShrineScene }          from '../scenes/ShrineScene.js';
+import { CharacterSelectScene } from '../scenes/CharacterSelectScene.js';
 
 // Nanti scene lain ditambahkan di sini sesuai phase
 
@@ -56,5 +57,6 @@ export const gameConfig = {
         GameOverScene,
         EventScene,
         ShrineScene,
+        CharacterSelectScene,
     ],
 };

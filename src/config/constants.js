@@ -1,26 +1,21 @@
-// ============================================================
-// constants.js — angka-angka tetap yang dipakai di seluruh game
-// Kalau mau ubah balance, ubah di sini saja
-// ============================================================
-
 export const GAME_WIDTH  = 1280;
 export const GAME_HEIGHT = 720;
 
 // ── Dungeon ──────────────────────────────────────────────────
-export const MAX_FLOOR        = 100;  // lantai terakhir
-export const FLOORS_PER_ZONE  = 10;   // B1-B10 = zona 1, dst
-export const BOSS_EVERY       = 10;   // boss di B10, B20, ...
+export const MAX_FLOOR        = 100;  
+export const FLOORS_PER_ZONE  = 10;   
+export const BOSS_EVERY       = 10;   
 export const TOTAL_ZONES      = 10;
 
 // ── Combat ───────────────────────────────────────────────────
-export const ENERGY_PER_TURN  = 4;    // energi yang didapat tiap giliran
-export const HAND_SIZE        = 5;    // kartu yang ditarik tiap giliran
-export const MIN_DECK_SIZE    = 10;   // deck minimal awal run
-export const MAX_DECK_SIZE    = 30;   // deck tidak boleh lebih dari ini
-export const IDEAL_DECK_SIZE  = 20;   // referensi ideal
+export const ENERGY_PER_TURN  = 4;    
+export const HAND_SIZE        = 5;    
+export const MIN_DECK_SIZE    = 10;   
+export const MAX_DECK_SIZE    = 30;   
+export const IDEAL_DECK_SIZE  = 20;   
 
 // ── Party ────────────────────────────────────────────────────
-export const MAX_PARTY_SIZE   = 3;    // 1 MC + 2 companion
+export const MAX_PARTY_SIZE   = 3;    
 export const MAX_COMPANIONS   = 2;
 
 // ── Rarity ───────────────────────────────────────────────────
@@ -34,26 +29,26 @@ export const RARITY = {
 
 // Warna rarity untuk UI
 export const RARITY_COLOR = {
-    common:    0x9e9e9e,  // abu-abu
-    uncommon:  0x4caf50,  // hijau
-    rare:      0x2196f3,  // biru
-    epic:      0x9c27b0,  // ungu
-    legendary: 0xff9800,  // oranye
+    common:    0x9e9e9e,  
+    uncommon:  0x4caf50,  
+    rare:      0x2196f3,  
+    epic:      0x9c27b0,  
+    legendary: 0xff9800,  
 };
 
 // Chance drop rarity per zona (index 0 = zona 1, dst)
 // Format: [common, uncommon, rare, epic, legendary] dalam persen
 export const RARITY_WEIGHTS_BY_ZONE = [
-    [60, 30, 9,  1,  0 ],  // zona 1
-    [55, 30, 12, 3,  0 ],  // zona 2
-    [45, 30, 18, 6,  1 ],  // zona 3
-    [40, 30, 20, 8,  2 ],  // zona 4
-    [35, 28, 22, 12, 3 ],  // zona 5
-    [30, 25, 25, 15, 5 ],  // zona 6
-    [25, 22, 28, 18, 7 ],  // zona 7
-    [20, 20, 28, 22, 10],  // zona 8
-    [15, 18, 27, 25, 15],  // zona 9
-    [10, 15, 25, 28, 22],  // zona 10
+    [60, 30, 9,  1,  0 ],  
+    [55, 30, 12, 3,  0 ],  
+    [45, 30, 18, 6,  1 ],  
+    [40, 30, 20, 8,  2 ],  
+    [35, 28, 22, 12, 3 ],  
+    [30, 25, 25, 15, 5 ],  
+    [25, 22, 28, 18, 7 ],  
+    [20, 20, 28, 22, 10],  
+    [15, 18, 27, 25, 15],  
+    [10, 15, 25, 28, 22],  
 ];
 
 // ── Status Effects ────────────────────────────────────────────
@@ -105,10 +100,10 @@ export const NODE_WEIGHTS = {
 // ── Equipment Slots ───────────────────────────────────────────
 export const EQUIP_SLOT = {
     WEAPON:    'weapon',
-    KABUTO:    'kabuto',    // helm
-    DO:        'do',        // baju besi
-    KOTE:      'kote',      // sarung tangan
-    SUNEATE:   'suneate',   // pelindung kaki
+    KABUTO:    'kabuto',    
+    DO:        'do',        
+    KOTE:      'kote',      
+    SUNEATE:   'suneate',   
     ACCESSORY: 'accessory',
 };
 
@@ -140,9 +135,9 @@ export const STAT = {
 
 export const STANCE = {
     NONE:    'none',
-    ATTACK:  'attack',   // +30% damage, tidak bisa block
-    DEFEND:  'defend',   // block x2, damage -30%
-    FLOW:    'flow',     // setiap dodge, dapat 1 energi
+    ATTACK:  'attack',   
+    DEFEND:  'defend',   
+    FLOW:    'flow',     
 };
 
 // Card rarity (untuk kartu baru)
@@ -167,7 +162,7 @@ export const CARD_TYPE = {
 export const DMG_TYPE = {
     PHYSICAL: 'physical',
     MAGIC:    'magic',
-    TRUE:     'true',     // true damage, tidak kena reduksi apapun
+    TRUE:     'true',     
 };
 
 // ── Curse Levels (difficulty) ─────────────────────────────────
@@ -194,14 +189,14 @@ export const CURSE_REWARD_MULTIPLIER = {
 
 // ── Scaling ───────────────────────────────────────────────────
 // Setiap lantai, stat musuh naik sekian persen dari base
-export const MONSTER_SCALE_PER_FLOOR = 0.08;  // 8% per lantai
-export const BOSS_STAT_MULTIPLIER    = 2.5;   // boss jauh lebih kuat dari musuh biasa
-export const ELITE_STAT_MULTIPLIER   = 1.5;   // elite lebih kuat dari musuh biasa
+export const MONSTER_SCALE_PER_FLOOR = 0.08;  
+export const BOSS_STAT_MULTIPLIER    = 2.5;   
+export const ELITE_STAT_MULTIPLIER   = 1.5;   
 
 // ── Gold ─────────────────────────────────────────────────────
-export const GOLD_BASE_COMBAT   = 15;   // gold dari combat biasa
-export const GOLD_BASE_ELITE    = 35;   // gold dari elite
-export const GOLD_BASE_BOSS     = 100;  // gold dari boss
+export const GOLD_BASE_COMBAT   = 15;   
+export const GOLD_BASE_ELITE    = 35;   
+export const GOLD_BASE_BOSS     = 100;  
 
 // ── UI / Scene Keys ───────────────────────────────────────────
 // Dipakai untuk Phaser scene.start('key')

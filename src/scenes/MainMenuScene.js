@@ -136,11 +136,8 @@ export class MainMenuScene extends Phaser.Scene {
                     });
                 }
             } else if (key === 'start') {
-                // Hapus save lama kalau ada, mulai baru
                 SaveSystem.clearRun();
-                this.scene.start(SCENE.NODE_MAP, {
-                    zone: 1, floor: 1, curseLevel: 1,
-                });
+                this.scene.start(SCENE.CHAR_SEL);
             }
         });
     }
