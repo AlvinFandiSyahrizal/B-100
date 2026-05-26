@@ -59,8 +59,8 @@ export class CharacterSelectScene extends Phaser.Scene {
         this._buildBackground();
         this._buildTitle();
         this._buildNameInput();
-        this._buildCurseLevelSelector();
-        this._buildCurseInfo();
+        this._buildCurseInfo();           
+        this._buildCurseLevelSelector();  
         this._buildStartButton();
         this._buildBackButton();
     }
