@@ -1,46 +1,52 @@
 // ============================================================
-// CharacterSelectScene.js — layar pilih karakter sebelum run
-// Pilih nama MC, curse level, lihat info difficulty
-// Phase 3+: nanti tambah pilih companion & pet starter di sini
+// CharacterSelectScene.js
+// Dungeon B100 — Yokai Roguelike
 // ============================================================
 
-import { SCENE, GAME_WIDTH, GAME_HEIGHT, MAX_CURSE_LEVEL, MIN_CURSE_LEVEL,
-         CURSE_STAT_MULTIPLIER, CURSE_REWARD_MULTIPLIER } from '../config/constants.js';
-import { SaveSystem } from '../storage/SaveSystem.js';
-import { GameGuard }  from '../utils/GameGuard.js';
+import {
+    SCENE,
+    GAME_WIDTH,
+    GAME_HEIGHT,
+    MAX_CURSE_LEVEL,
+    MIN_CURSE_LEVEL,
+    CURSE_STAT_MULTIPLIER,
+    CURSE_REWARD_MULTIPLIER
+} from '../config/constants.js';
 
-// Info tiap curse level
+import { SaveSystem } from '../storage/SaveSystem.js';
+import { GameGuard } from '../utils/GameGuard.js';
+
 const CURSE_INFO = [
-    null, // index 0 kosong
+    null,
     {
-        name:   'Bisikan Dungeon',
-        desc:   'Dungeon baru terjaga. Musuh belum sepenuhnya sadar.',
-        flavor: '"Langkah pertama selalu yang paling aman."',
-        color:  '#44aa44',
+        name: 'Bisikan Yokai',
+        desc: 'Aura dungeon masih tenang. Roh-roh belum sepenuhnya terbangun.',
+        flavor: '"Langkah awal menentukan nasibmu."',
+        color: '#54d46d',
     },
     {
-        name:   'Gema Kutukan',
-        desc:   'Dungeon mulai bereaksi terhadap kehadiranmu.',
-        flavor: '"Kamu mulai terasa asing di tempat ini."',
-        color:  '#88aa44',
+        name: 'Kutukan Senja',
+        desc: 'Energi yokai mulai memenuhi lorong gelap.',
+        flavor: '"Mereka mulai memperhatikanmu."',
+        color: '#c3d54d',
     },
     {
-        name:   'Amarah Yokai',
-        desc:   'Para yokai semakin kuat dan waspada. Reward lebih besar.',
-        flavor: '"Mereka tahu kamu akan datang."',
-        color:  '#ccaa44',
+        name: 'Tarian Arwah',
+        desc: 'Yokai bergerak cepat. Reward meningkat.',
+        flavor: '"Bayangan mulai bergerak sendiri."',
+        color: '#f0b04d',
     },
     {
-        name:   'Murka Abadi',
-        desc:   'Dungeon bergolak. Hanya yang kuat yang bisa bertahan.',
-        flavor: '"Setiap langkah adalah pertaruhan nyawa."',
-        color:  '#cc6633',
+        name: 'Gerbang Neraka',
+        desc: 'Kutukan semakin dalam. Semua jadi lebih brutal.',
+        flavor: '"Jangan lihat ke belakang."',
+        color: '#f06c4d',
     },
     {
-        name:   'Kehancuran Total',
-        desc:   'Kutukan penuh. Musuh sangat kuat, reward sangat besar.',
-        flavor: '"Tidak ada yang kembali dari sini... sampai sekarang."',
-        color:  '#cc3333',
+        name: 'Kiamat Yokai',
+        desc: 'Dungeon sepenuhnya hidup.',
+        flavor: '"Yang masuk tidak pernah sama saat keluar."',
+        color: '#ff4444',
     },
 ];
 
@@ -50,266 +56,766 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
 
     init() {
-        this.curseLevel  = 1;
-        this.playerName  = 'Samurai';
+        this.curseLevel = 1;
+        this.playerName = '';
         this.nameEditing = false;
+        this.placeholder = 'Masukkan nama ronin...';
+
+        this._startingRun = false;
     }
 
     create() {
         this._buildBackground();
         this._buildTitle();
         this._buildNameInput();
-        this._buildCurseInfo();           
-        this._buildCurseLevelSelector();  
+        this._buildCurseInfo();
+        this._buildCurseLevelSelector();
         this._buildStartButton();
         this._buildBackButton();
     }
 
-    // ── UI ────────────────────────────────────────────────────
+_buildBackground() {
+    // Base dark
+    this.add.rectangle(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT / 2,
+        GAME_WIDTH,
+        GAME_HEIGHT,
+        0x06070d
+    );
 
-    _buildBackground() {
-        this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x07080d);
+    // =========================
+    // GRID
+    // =========================
+    const grid = this.add.graphics();
 
-        // Efek grid
-        const g = this.add.graphics();
-        g.lineStyle(1, 0x111122, 0.4);
-        for (let y = 0; y < GAME_HEIGHT; y += 40) {
-            g.moveTo(0, y); g.lineTo(GAME_WIDTH, y);
+    grid.lineStyle(1, 0x141a28, 0.35);
+
+    for (let y = 0; y < GAME_HEIGHT; y += 42) {
+        grid.moveTo(0, y);
+        grid.lineTo(GAME_WIDTH, y);
+    }
+
+    for (let x = 0; x < GAME_WIDTH; x += 90) {
+        grid.moveTo(x, 0);
+        grid.lineTo(x, GAME_HEIGHT);
+    }
+
+    grid.strokePath();
+
+    // =========================
+    // GLOW tengah
+    // =========================
+    const glow = this.add.graphics();
+
+    glow.fillStyle(0x2b1530, 0.18);
+    glow.fillCircle(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT / 2,
+        240
+    );
+
+    glow.fillStyle(0x8b3e1d, 0.08);
+    glow.fillCircle(
+        GAME_WIDTH / 2,
+        160,
+        140
+    );
+
+    // =========================
+    // Kabut bawah
+    // =========================
+    const fog1 = this.add.rectangle(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT - 35,
+        GAME_WIDTH,
+        90,
+        0x241633,
+        0.18
+    );
+
+    const fog2 = this.add.rectangle(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT - 20,
+        GAME_WIDTH,
+        70,
+        0x111827,
+        0.15
+    );
+
+    this.tweens.add({
+        targets: fog1,
+        alpha: 0.28,
+        duration: 2500,
+        yoyo: true,
+        repeat: -1,
+    });
+
+    this.tweens.add({
+        targets: fog2,
+        alpha: 0.24,
+        duration: 3200,
+        yoyo: true,
+        repeat: -1,
+    });
+
+    // =========================
+    // Spirit flame particles
+    // =========================
+// =========================
+// Spirit orb ambience
+// =========================
+
+for (let i = 0; i < 7; i++) {
+    const x =
+        Phaser.Math.Between(
+            280,
+            GAME_WIDTH - 280
+        );
+
+    const y =
+        Phaser.Math.Between(
+            120,
+            GAME_HEIGHT - 180
+        );
+
+    const orb =
+        this.add.circle(
+            x,
+            y,
+            Phaser.Math.Between(2, 4),
+            Phaser.Utils.Array.GetRandom([
+                0x8b5cf6,
+                0x60a5fa,
+                0xf59e0b,
+            ]),
+            0.22
+        );
+
+    this.tweens.add({
+        targets: orb,
+
+        y: y - Phaser.Math.Between(
+            10,
+            30
+        ),
+
+        alpha: {
+            from: 0.25,
+            to: 0,
+        },
+
+        duration:
+            Phaser.Math.Between(
+                2500,
+                4500
+            ),
+
+        repeat: -1,
+
+        delay:
+            Phaser.Math.Between(
+                0,
+                2500
+            ),
+    });
+}
+
+    // =========================
+    // pulse ambience
+    // =========================
+    this.tweens.add({
+        targets: glow,
+        alpha: 0.75,
+        duration: 2800,
+        yoyo: true,
+        repeat: -1,
+    });
+}
+
+_buildTitle() {
+    // torii kiri
+    this.add.text(
+        GAME_WIDTH / 2 - 170,
+        108,
+        '⛩',
+        {
+            fontSize: '24px',
+            color: '#d97a2b',
         }
-        g.strokePath();
-    }
+    ).setOrigin(0.5);
 
-    _buildTitle() {
-        this.add.text(GAME_WIDTH / 2, 70, 'DUNGEON  B100', {
-            fontFamily: 'monospace', fontSize: '13px',
-            color: '#443322', letterSpacing: 6,
-        }).setOrigin(0.5);
+    // torii kanan
+    this.add.text(
+        GAME_WIDTH / 2 + 170,
+        108,
+        '⛩',
+        {
+            fontSize: '24px',
+            color: '#d97a2b',
+        }
+    ).setOrigin(0.5);
 
-        this.add.text(GAME_WIDTH / 2, 105, 'Persiapkan Diri', {
-            fontFamily: 'monospace', fontSize: '32px',
-            color: '#cc8833', fontStyle: 'bold',
-        }).setOrigin(0.5);
+    const title =
+        this.add.text(
+            GAME_WIDTH / 2,
+            108,
+            'Gerbang Yokai',
+            {
+                fontFamily: 'monospace',
+                fontSize: '34px',
+                color: '#f7b24a',
+                fontStyle: 'bold',
+            }
+        ).setOrigin(0.5);
 
-        this.add.text(GAME_WIDTH / 2, 143,
-            'Setiap keputusan di layar ini akan mempengaruhi seluruh perjalananmu.', {
-            fontFamily: 'monospace', fontSize: '12px',
-            color: '#334455', fontStyle: 'italic',
-        }).setOrigin(0.5);
-    }
+    this.tweens.add({
+        targets: title,
+        alpha: 0.82,
+        duration: 1600,
+        yoyo: true,
+        repeat: -1,
+    });
+
+    this.add.text(
+        GAME_WIDTH / 2,
+        70,
+        'DUNGEON B100',
+        {
+            fontSize: '12px',
+            color: '#88612e',
+            letterSpacing: 5,
+        }
+    ).setOrigin(0.5);
+
+    this.add.text(
+        GAME_WIDTH / 2,
+        145,
+        'Tentukan nama dan hadapi seratus lantai kutukan.',
+        {
+            fontSize: '12px',
+            color: '#8d97aa',
+        }
+    ).setOrigin(0.5);
+}
 
     _buildNameInput() {
-        this.add.text(GAME_WIDTH / 2 - 200, 200, 'NAMA SAMURAI', {
-            fontFamily: 'monospace', fontSize: '11px',
-            color: '#334455', letterSpacing: 2,
-        });
-
-        // Input field
-        const fieldBg = this.add.rectangle(GAME_WIDTH / 2 - 50, 225, 300, 40, 0x111122)
-            .setStrokeStyle(1, 0x334455)
+        const box = this.add.rectangle(
+            GAME_WIDTH / 2,
+            225,
+            360,
+            48,
+            0x0f1322
+        )
+            .setStrokeStyle(2, 0x293244)
             .setInteractive({ useHandCursor: true });
 
-        this.nameTxt = this.add.text(GAME_WIDTH / 2 - 50, 225, this.playerName, {
-            fontFamily: 'monospace', fontSize: '18px', color: '#ffffff',
-        }).setOrigin(0.5);
+        this.nameTxt = this.add.text(
+            GAME_WIDTH / 2 - 150,
+            225,
+            this.placeholder,
+            {
+                fontFamily: 'monospace',
+                fontSize: '18px',
+                color: '#6f7c94',
+            }
+        ).setOrigin(0, 0.5);
 
-        // Cursor kedip
-        this.cursor = this.add.text(GAME_WIDTH / 2 - 50 + 80, 225, '', {
-            fontFamily: 'monospace', fontSize: '18px', color: '#cc8833',
-        }).setOrigin(0.5);
+        this.cursor = this.add.text(
+            GAME_WIDTH / 2 - 150,
+            225,
+            '',
+            {
+                fontFamily: 'monospace',
+                fontSize: '18px',
+                color: '#f5b34d',
+            }
+        ).setOrigin(0, 0.5);
 
-        // Klik untuk edit
-        fieldBg.on('pointerdown', () => {
+        box.on('pointerdown', () => {
             this.nameEditing = true;
-            fieldBg.setStrokeStyle(2, 0xcc8833);
+
+            if (!this.playerName) {
+                this.nameTxt.setText('');
+            }
+
+            box.setStrokeStyle(2, 0xf5b34d);
+
             this._startCursorBlink();
         });
 
-        // Keyboard input
-        this.input.keyboard.on('keydown', (event) => {
+        this.input.keyboard.on('keydown', (e) => {
             if (!this.nameEditing) return;
 
-            if (event.key === 'Enter' || event.key === 'Escape') {
+            if (e.key === 'Enter' || e.key === 'Escape') {
                 this.nameEditing = false;
-                fieldBg.setStrokeStyle(1, 0x334455);
+
+                if (!this.playerName) {
+                    this.nameTxt
+                        .setText(this.placeholder)
+                        .setColor('#6f7c94');
+                }
+
+                box.setStrokeStyle(2, 0x293244);
                 this.cursor.setText('');
                 return;
             }
 
-            if (event.key === 'Backspace') {
-                this.playerName = this.playerName.slice(0, -1);
-            } else if (event.key.length === 1 && this.playerName.length < 16) {
-                this.playerName += event.key;
+            if (e.key === 'Backspace') {
+                this.playerName =
+                    this.playerName.slice(0, -1);
+            } else if (
+                e.key.length === 1 &&
+                this.playerName.length < 16
+            ) {
+                this.playerName += e.key;
             }
 
-            this.nameTxt.setText(this.playerName || ' ');
-            // Update posisi cursor
-            const nameWidth = this.nameTxt.width;
-            this.cursor.setX(GAME_WIDTH / 2 - 50 - 150 + nameWidth + 5);
+            this.nameTxt
+                .setText(this.playerName || '')
+                .setColor('#ffffff');
+
+            this.cursor.setX(
+                this.nameTxt.x +
+                this.nameTxt.width +
+                4
+            );
         });
     }
 
     _startCursorBlink() {
-        if (this._cursorTween) this._cursorTween.stop();
-        this._cursorTween = this.tweens.add({
-            targets:  this.cursor,
-            alpha:    0,
-            duration: 500,
-            yoyo:     true,
-            repeat:   -1,
-            onUpdate: () => {
-                if (!this.nameEditing) {
-                    this._cursorTween.stop();
-                    this.cursor.setText('');
-                } else {
-                    this.cursor.setText('|');
-                }
-            },
-        });
+        if (this._cursorTween) {
+            this._cursorTween.stop();
+        }
+
+        this._cursorTween =
+            this.tweens.add({
+                targets: this.cursor,
+                alpha: 0,
+                duration: 500,
+                yoyo: true,
+                repeat: -1,
+                onUpdate: () => {
+                    if (this.nameEditing) {
+                        this.cursor.setText('|');
+                    }
+                },
+            });
     }
 
-    _buildCurseLevelSelector() {
-        this.add.text(GAME_WIDTH / 2 - 200, 285, 'CURSE LEVEL', {
-            fontFamily: 'monospace', fontSize: '11px',
-            color: '#334455', letterSpacing: 2,
-        });
+_buildCurseLevelSelector() {
+    const y = 320;
 
-        // Tombol - dan +
-        const btnLeft = this.add.rectangle(GAME_WIDTH / 2 - 180, 315, 40, 36, 0x111122)
-            .setStrokeStyle(1, 0x223344)
-            .setInteractive({ useHandCursor: true });
-        this.add.text(GAME_WIDTH / 2 - 180, 315, '◀', {
-            fontFamily: 'monospace', fontSize: '16px', color: '#4466aa',
-        }).setOrigin(0.5);
-
-        const btnRight = this.add.rectangle(GAME_WIDTH / 2 + 80, 315, 40, 36, 0x111122)
-            .setStrokeStyle(1, 0x223344)
-            .setInteractive({ useHandCursor: true });
-        this.add.text(GAME_WIDTH / 2 + 80, 315, '▶', {
-            fontFamily: 'monospace', fontSize: '16px', color: '#4466aa',
-        }).setOrigin(0.5);
-
-        // Display level
-        this.curseLevelTxt = this.add.text(GAME_WIDTH / 2 - 50, 315, '', {
-            fontFamily: 'monospace', fontSize: '22px',
-            color: '#cc8833', fontStyle: 'bold',
-        }).setOrigin(0.5);
-
-        this.curseNameTxt = this.add.text(GAME_WIDTH / 2 - 50, 340, '', {
-            fontFamily: 'monospace', fontSize: '11px', color: '#556677',
-        }).setOrigin(0.5);
-
-        btnLeft.on('pointerdown', () => {
-            if (this.curseLevel > MIN_CURSE_LEVEL) {
-                this.curseLevel--;
-                this._updateCurseDisplay();
+    const left =
+        this.add.text(
+            GAME_WIDTH / 2 - 140,
+            y,
+            '◀',
+            {
+                fontFamily: 'monospace',
+                fontSize: '22px',
+                color: '#7ea8ff',
             }
+        )
+        .setOrigin(0.5)
+        .setInteractive({
+            useHandCursor: true
         });
 
-        btnRight.on('pointerdown', () => {
-            if (this.curseLevel < MAX_CURSE_LEVEL) {
-                this.curseLevel++;
-                this._updateCurseDisplay();
+    const right =
+        this.add.text(
+            GAME_WIDTH / 2 + 140,
+            y,
+            '▶',
+            {
+                fontFamily: 'monospace',
+                fontSize: '22px',
+                color: '#7ea8ff',
             }
+        )
+        .setOrigin(0.5)
+        .setInteractive({
+            useHandCursor: true
         });
 
-        this._updateCurseDisplay();
-    }
+    this.curseLevelTxt =
+        this.add.text(
+            GAME_WIDTH / 2,
+            y,
+            '',
+            {
+                fontFamily: 'monospace',
+                fontSize: '24px',
+                color: '#ffffff',
+                fontStyle: 'bold',
+            }
+        ).setOrigin(0.5);
+
+    this.curseNameTxt =
+        this.add.text(
+            GAME_WIDTH / 2,
+            y + 28,
+            '',
+            {
+                fontFamily: 'monospace',
+                fontSize: '12px',
+            }
+        ).setOrigin(0.5);
+
+    // =========================
+    // hover kiri
+    // =========================
+    left.on('pointerover', () => {
+        left.setScale(1.15);
+        left.setColor('#ffffff');
+    });
+
+    left.on('pointerout', () => {
+        left.setScale(1);
+        left.setColor('#7ea8ff');
+    });
+
+    // =========================
+    // klik kiri
+    // =========================
+    left.on('pointerdown', () => {
+        if (
+            this.curseLevel >
+            MIN_CURSE_LEVEL
+        ) {
+            this.curseLevel--;
+
+            this._updateCurseDisplay();
+        }
+    });
+
+    // =========================
+    // hover kanan
+    // =========================
+    right.on('pointerover', () => {
+        right.setScale(1.15);
+        right.setColor('#ffffff');
+    });
+
+    right.on('pointerout', () => {
+        right.setScale(1);
+        right.setColor('#7ea8ff');
+    });
+
+    // =========================
+    // klik kanan
+    // =========================
+    right.on('pointerdown', () => {
+        if (
+            this.curseLevel <
+            MAX_CURSE_LEVEL
+        ) {
+            this.curseLevel++;
+
+            this._updateCurseDisplay();
+        }
+    });
+
+    this._updateCurseDisplay();
+}
 
     _buildCurseInfo() {
-        // Panel info curse level
-        this.cursePanelBg = this.add.rectangle(GAME_WIDTH / 2, 460, 600, 140, 0x0d0e1a)
-            .setStrokeStyle(1, 0x1a1a2e);
+        this.cursePanelBg =
+            this.add.rectangle(
+                GAME_WIDTH / 2,
+                470,
+                640,
+                150,
+                0x101425
+            )
+                .setStrokeStyle(2, 0x22293b);
 
-        this.curseDescTxt = this.add.text(GAME_WIDTH / 2, 435, '', {
-            fontFamily: 'monospace', fontSize: '13px', color: '#667788',
-            align: 'center', wordWrap: { width: 560 },
-        }).setOrigin(0.5);
+        this.curseDescTxt =
+            this.add.text(
+                GAME_WIDTH / 2,
+                445,
+                '',
+                {
+                    fontSize: '13px',
+                    color: '#d6dde8',
+                    align: 'center',
+                    wordWrap: { width: 580 },
+                }
+            ).setOrigin(0.5);
 
-        this.curseFlavorTxt = this.add.text(GAME_WIDTH / 2, 465, '', {
-            fontFamily: 'monospace', fontSize: '11px',
-            color: '#334455', fontStyle: 'italic',
-        }).setOrigin(0.5);
+        this.curseFlavorTxt =
+            this.add.text(
+                GAME_WIDTH / 2,
+                478,
+                '',
+                {
+                    fontSize: '11px',
+                    color: '#8f9db4',
+                    fontStyle: 'italic',
+                }
+            ).setOrigin(0.5);
 
-        // Stat multiplier info
-        this.curseStatTxt = this.add.text(GAME_WIDTH / 2, 495, '', {
-            fontFamily: 'monospace', fontSize: '11px', color: '#445566',
-            align: 'center',
-        }).setOrigin(0.5);
+        this.curseStatTxt =
+            this.add.text(
+                GAME_WIDTH / 2,
+                510,
+                '',
+                {
+                    fontSize: '11px',
+                    color: '#7d8aa3',
+                }
+            ).setOrigin(0.5);
 
         this._updateCurseInfo();
     }
 
     _buildStartButton() {
-        const bx = GAME_WIDTH / 2;
-        const by = GAME_HEIGHT - 110;
+        const bg =
+            this.add.rectangle(
+                GAME_WIDTH / 2,
+                GAME_HEIGHT - 110,
+                300,
+                56,
+                0x2c120a
+            )
+                .setStrokeStyle(2, 0xf08c42)
+                .setInteractive();
 
-        const bg = this.add.rectangle(bx, by, 280, 52, 0x1a0a0a)
-            .setStrokeStyle(1, 0x663322)
-            .setInteractive({ useHandCursor: true });
+        const txt =
+            this.add.text(
+                GAME_WIDTH / 2,
+                GAME_HEIGHT - 110,
+                '⚔ Masuki Dungeon',
+                {
+                    fontSize: '18px',
+                    color: '#ffb067',
+                    fontStyle: 'bold',
+                }
+            ).setOrigin(0.5);
 
-        const txt = this.add.text(bx, by, '⚔  Masuki Dungeon', {
-            fontFamily: 'monospace', fontSize: '18px', color: '#cc6633',
-            fontStyle: 'bold',
-        }).setOrigin(0.5);
+bg.on('pointerover', () => {
+    bg.setScale(1.03);
+    bg.setFillStyle(0x44200d);
+    txt.setColor('#ffd59a');
+});
 
-        bg.on('pointerover', () => { bg.setFillStyle(0x2a1010); txt.setColor('#ff8844'); });
-        bg.on('pointerout',  () => { bg.setFillStyle(0x1a0a0a); txt.setColor('#cc6633'); });
-        bg.on('pointerdown', () => this._startRun());
+bg.on('pointerout', () => {
+    bg.setScale(1);
+    bg.setFillStyle(0x2c120a);
+    txt.setColor('#ffb067');
+});
+
+        bg.on('pointerdown', () => {
+            this._startRun();
+        });
+
+        this.tweens.add({
+            targets: bg,
+            alpha: 0.85,
+            duration: 1200,
+            yoyo: true,
+            repeat: -1,
+        });
+
     }
 
     _buildBackButton() {
-        const bg = this.add.rectangle(80, GAME_HEIGHT - 50, 120, 34, 0x0d0d1a)
-            .setStrokeStyle(1, 0x222233)
-            .setInteractive({ useHandCursor: true });
-
-        const txt = this.add.text(80, GAME_HEIGHT - 50, '← Kembali', {
-            fontFamily: 'monospace', fontSize: '12px', color: '#334455',
-        }).setOrigin(0.5);
-
-        bg.on('pointerover', () => txt.setColor('#6677aa'));
-        bg.on('pointerout',  () => txt.setColor('#334455'));
-        bg.on('pointerdown', () => this.scene.start(SCENE.MAIN_MENU));
+        this.add.text(
+            80,
+            GAME_HEIGHT - 50,
+            '← Kembali',
+            {
+                fontSize: '12px',
+                color: '#76839b',
+            }
+        )
+            .setOrigin(0.5)
+            .setInteractive()
+            .on(
+                'pointerdown',
+                () => this.scene.start(
+                    SCENE.MAIN_MENU
+                )
+            );
     }
 
-    // ── Update Display ────────────────────────────────────────
-
     _updateCurseDisplay() {
-        const info = CURSE_INFO[this.curseLevel];
-        this.curseLevelTxt.setText(`${this.curseLevel}  /  ${MAX_CURSE_LEVEL}`);
-        this.curseLevelTxt.setColor(info?.color || '#cc8833');
-        this.curseNameTxt.setText(info?.name || '').setColor(info?.color || '#cc8833');
+        const info =
+            CURSE_INFO[this.curseLevel];
+
+        this.curseLevelTxt.setText(
+            `${this.curseLevel} / ${MAX_CURSE_LEVEL}`
+        );
+
+        this.curseLevelTxt.setColor(
+            info.color
+        );
+
+        this.curseNameTxt
+            .setText(info.name)
+            .setColor(info.color);
+
         this._updateCurseInfo();
     }
 
     _updateCurseInfo() {
-        const info  = CURSE_INFO[this.curseLevel];
-        if (!info) return;
+        const info =
+            CURSE_INFO[this.curseLevel];
 
-        this.curseDescTxt.setText(info.desc);
-        this.curseFlavorTxt.setText(info.flavor);
+        const stat =
+            CURSE_STAT_MULTIPLIER[
+                this.curseLevel
+            ];
 
-        const statMult   = CURSE_STAT_MULTIPLIER[this.curseLevel] || 1;
-        const rewardMult = CURSE_REWARD_MULTIPLIER[this.curseLevel] || 1;
+        const reward =
+            CURSE_REWARD_MULTIPLIER[
+                this.curseLevel
+            ];
+
+        this.curseDescTxt.setText(
+            info.desc
+        );
+
+        this.curseFlavorTxt.setText(
+            info.flavor
+        );
+
         this.curseStatTxt.setText(
-            `Musuh: ×${statMult.toFixed(1)} stat   |   Reward: ×${rewardMult.toFixed(1)} gold & item`
+            `Musuh ×${stat.toFixed(1)}   •   Reward ×${reward.toFixed(1)}`
         );
     }
 
-    // ── Start Run ─────────────────────────────────────────────
-
-    _startRun() {
-        const name = this.playerName.trim() || 'Samurai';
-
-        // Hapus save lama kalau ada
-        SaveSystem.clearRun();
-        GameGuard.activate();
-
-        this.scene.start(SCENE.NODE_MAP, {
-            zone:       1,
-            floor:      1,
-            curseLevel: this.curseLevel,
-            playerName: name,
-            mapData:    null,
-        });
+    _showNameWarning(msg) {
+    if (this.warningTxt) {
+        this.warningTxt.destroy();
     }
+
+    this.warningTxt =
+        this.add.text(
+            GAME_WIDTH / 2,
+            270,
+            msg,
+            {
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                color: '#ff6b6b',
+                fontStyle: 'bold',
+            }
+        )
+        .setOrigin(0.5);
+
+    this.tweens.add({
+        targets: this.warningTxt,
+        alpha: 0,
+        duration: 1200,
+        delay: 1000,
+        onComplete: () => {
+            this.warningTxt?.destroy();
+            this.warningTxt = null;
+        }
+    });
+}
+
+_startRun() {
+    const name =
+        this.playerName.trim();
+
+    // =========================
+    // wajib isi nama
+    // =========================
+    if (!name) {
+        this._showNameWarning(
+            'Nama ronin belum diisi.'
+        );
+        return;
+    }
+
+    // jangan double click
+    if (this._startingRun) {
+        return;
+    }
+
+    this._startingRun = true;
+
+    SaveSystem.clearRun();
+    GameGuard.activate();
+
+    const overlay =
+        this.add.rectangle(
+            GAME_WIDTH / 2,
+            GAME_HEIGHT / 2,
+            GAME_WIDTH,
+            GAME_HEIGHT,
+            0x000000,
+            0
+        )
+        .setDepth(999);
+
+    const floorTxt =
+        this.add.text(
+            GAME_WIDTH / 2,
+            GAME_HEIGHT / 2 - 18,
+            'LANTAI 1',
+            {
+                fontFamily: 'monospace',
+                fontSize: '34px',
+                color: '#f5b34d',
+                fontStyle: 'bold',
+            }
+        )
+        .setOrigin(0.5)
+        .setDepth(1000)
+        .setAlpha(0);
+
+    const subTxt =
+        this.add.text(
+            GAME_WIDTH / 2,
+            GAME_HEIGHT / 2 + 20,
+            'DUNGEON B100',
+            {
+                fontFamily: 'monospace',
+                fontSize: '14px',
+                color: '#d8e2ff',
+            }
+        )
+        .setOrigin(0.5)
+        .setDepth(1000)
+        .setAlpha(0);
+
+    this.tweens.add({
+        targets: overlay,
+        alpha: 0.85,
+        duration: 450,
+    });
+
+    this.tweens.add({
+        targets: [
+            floorTxt,
+            subTxt
+        ],
+        alpha: 1,
+        duration: 300,
+        delay: 250,
+    });
+
+    this.time.delayedCall(
+        1500,
+        () => {
+            this._startingRun = false;
+
+            this.scene.start(
+                SCENE.NODE_MAP,
+                {
+                    zone: 1,
+                    floor: 1,
+                    curseLevel:
+                        this.curseLevel,
+                    playerName: name,
+                    mapData: null,
+                }
+            );
+        }
+    );
+}
+
 }
