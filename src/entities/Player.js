@@ -321,6 +321,7 @@ export class Player {
             name:          this.name,
             curseLevel:    this.curseLevel,
             baseStats:     this.baseStats,
+            stats:         this.stats,
             hp:            this.hp,
             mp:            this.mp,
             level:         this.level,
@@ -338,7 +339,7 @@ export class Player {
     static fromJSON(data) {
         const p = new Player({ name: data.name, curseLevel: data.curseLevel });
         Object.assign(p.baseStats, data.baseStats);
-        p.stats         = p._calculateStats();  // hitung dulu sebelum assign hp
+        p.stats         = data.stats         || p._calculateStats(); 
         p.hp            = Number(data.hp)    || p.stats[STAT.HP_MAX];
         p.mp            = Number(data.mp)    || p.stats[STAT.MP_MAX];
         p.level         = Number(data.level) || 1;
