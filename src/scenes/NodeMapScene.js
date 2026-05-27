@@ -43,12 +43,14 @@ export class NodeMapScene extends Phaser.Scene {
         super({ key: SCENE.NODE_MAP });
     }
 
-    init(data) {
-        this.zone        = data.zone        || 1;
-        this.floor       = data.floor       || 1;
-        this.curseLevel  = data.curseLevel  || 1;
-        this.playerName  = data.playerName  || 'Samurai';
-        this.playerData  = data.playerData  || null;
+        init(data) {
+        this.zone          = data.zone || 1;
+        this.floor         = data.floor || 1;
+        this.curseLevel    = data.curseLevel || 1;
+        this.playerData    = data.playerData || null;
+        this.mapData       = data.mapData || null;
+        this.currentNodeId = data.currentNodeId || 'start';
+
 
         // Tentukan apakah lantai ini adalah boss besar
         this.isBossFloor = (this.floor % 10 === 0);
@@ -61,19 +63,21 @@ export class NodeMapScene extends Phaser.Scene {
         }
 
         this.currentNodeId = data.currentNodeId || 'start';
+        this.visitedNodes  = data.visitedNodes || ['start'];
+        this.pathHistory   = data.pathHistory || [];
+        this.selectedPath  = data.selectedPath || ['start'];
     }
 
     create() {
         // Aktifkan proteksi refresh selama game berjalan
         GameGuard.activate();
-
         this._buildBackground();
         this._buildFloorInfo();
         this._buildMap();
         this._buildLegend();
         this._buildMenuButton();
+        this._buildCursePreview();
         this._pauseOpen = false;
-
         // ESC toggle pause menu — pakai update loop bukan event listener
         this.input.keyboard.on('keydown-ESC', () => {
             if (this._pauseOpen) {
@@ -89,7 +93,6 @@ export class NodeMapScene extends Phaser.Scene {
     }
 
     // ── Background ────────────────────────────────────────────
-
     _buildBackground() {
         this.add.rectangle(
             GAME_WIDTH / 2, GAME_HEIGHT / 2,
@@ -102,10 +105,91 @@ export class NodeMapScene extends Phaser.Scene {
             g.moveTo(0, y); g.lineTo(GAME_WIDTH, y);
         }
         g.strokePath();
+        const glow =
+        this.add.graphics();
+
+        glow.fillStyle(
+            0x3b1f52,
+            0.12
+        );
+
+        glow.fillCircle(
+            GAME_WIDTH / 2,
+            GAME_HEIGHT / 2,
+            260
+        );
+        const fog =
+            this.add.rectangle(
+                GAME_WIDTH / 2,
+                GAME_HEIGHT - 35,
+                GAME_WIDTH,
+                120,
+                0x241633,
+                0.18
+            );
+        this.tweens.add({
+            targets: fog,
+            alpha: 0.28,
+            duration: 2600,
+            yoyo: true,
+            repeat: -1,
+        });
+    }
+
+    _buildLanterns() {
+    const lanternPos = [
+        { x: 70, y: 95 },
+        { x: GAME_WIDTH - 70, y: 95 },
+        { x: 55, y: GAME_HEIGHT - 90 },
+        { x: GAME_WIDTH - 55, y: GAME_HEIGHT - 90 },
+    ];
+
+        lanternPos.forEach((p) => {
+            const glow =
+                this.add.circle(
+                    p.x,
+                    p.y,
+                    28,
+                    0xff8c42,
+                    0.14
+                );
+
+            const body =
+                this.add.rectangle(
+                    p.x,
+                    p.y,
+                    16,
+                    24,
+                    0xffc36b,
+                    0.9
+                )
+                .setStrokeStyle(
+                    1,
+                    0x6b3518
+                );
+
+            this.tweens.add({
+                targets: [glow, body],
+                alpha: {
+                    from: 0.65,
+                    to: 1,
+                },
+                duration: 900,
+                yoyo: true,
+                repeat: -1,
+            });
+
+            this.tweens.add({
+                targets: body,
+                y: p.y + 2,
+                duration: 1600,
+                yoyo: true,
+                repeat: -1,
+            });
+        });
     }
 
     // ── Floor Info Header ─────────────────────────────────────
-
     _buildFloorInfo() {
         const zone  = this.zone;
         const floor = this.floor;
@@ -127,16 +211,44 @@ export class NodeMapScene extends Phaser.Scene {
             letterSpacing: 2,
         }).setOrigin(0.5);
 
-        // HP player kalau ada
         if (this.playerData) {
-            const hp    = this.playerData.hp || 0;
-            const hpMax = this.playerData.stats?.hp_max || 100;
-            const gold  = this.playerData.gold || 0;
+            // console.log(
+            //     '[NODE MAP PLAYER DATA]',
+            //     this.playerData
+            // );
+            const hp =
+                Number(this.playerData.hp ?? 0);
 
-            this.add.text(GAME_WIDTH - 20, 28,
-                `❤ ${hp}/${hpMax}   💰 ${gold}`, {
-                fontFamily: 'monospace', fontSize: '12px', color: '#446655',
-            }).setOrigin(1, 0.5);
+            const hpMax =
+                this._getPlayerMaxHp();
+
+            const gold =
+                Number(this.playerData.gold ?? 0);
+
+            this.add.rectangle(
+                GAME_WIDTH - 120,
+                28,
+                190,
+                28,
+                0x101425,
+                0.95
+            )
+            .setStrokeStyle(
+                1,
+                0x2a3146
+            );
+
+            this.add.text(
+                GAME_WIDTH - 120,
+                28,
+                `❤ ${hp}/${hpMax}   💰 ${gold}`,
+                {
+                    fontFamily: 'monospace',
+                    fontSize: '11px',
+                    color: '#dce6ff',
+                }
+            )
+            .setOrigin(0.5);
         }
 
         const g = this.add.graphics();
@@ -146,7 +258,6 @@ export class NodeMapScene extends Phaser.Scene {
     }
 
     // ── Map ───────────────────────────────────────────────────
-
     _buildMap() {
         const { nodes, edges } = this.mapData;
         this.nodePositions = this._calculatePositions(nodes);
@@ -181,29 +292,75 @@ export class NodeMapScene extends Phaser.Scene {
     }
 
     _drawEdges(edges, nodes) {
-        const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
-        const g       = this.add.graphics();
+        const g =
+            this.add.graphics();
 
         for (const edge of edges) {
-            const from     = this.nodePositions[edge.from];
-            const to       = this.nodePositions[edge.to];
-            if (!from || !to) continue;
+            const from =
+                this.nodePositions[
+                    edge.from
+                ];
 
-            const fromNode = nodeMap[edge.from];
-            const available = this._isAvailable(nodeMap[edge.to]);
-            const cleared   = fromNode?.cleared;
+            const to =
+                this.nodePositions[
+                    edge.to
+                ];
 
-            if (cleared && available) {
-                g.lineStyle(3, 0x8bb8ff, 0.95 );
-            } else if (cleared) {
-                g.lineStyle(2, 0x405070, 0.65);
-            } else {
-                g.lineStyle(1, 0x1a1a2e, 0.4);
+            if (!from || !to) {
+                continue;
             }
 
+            // history edge
+            const wasTaken =
+                this.pathHistory.some(
+                    p =>
+                        p.from ===
+                            edge.from &&
+                        p.to ===
+                            edge.to
+                );
+
+            // current available
+            const fromCurrent =
+                edge.from ===
+                this.currentNodeId;
+
+            let width = 1;
+            let color = 0x1a1a2e;
+            let alpha = 0.35;
+
+            // history tetap nyala
+            if (wasTaken) {
+                width = 4;
+                color = 0x8bb8ff;
+                alpha = 1;
+            }
+
+            // cuma cabang node aktif
+            else if (fromCurrent) {
+                width = 2;
+                color = 0x405070;
+                alpha = 0.75;
+            }
+
+            g.lineStyle(
+                width,
+                color,
+                alpha
+            );
+
             g.beginPath();
-            g.moveTo(from.x, from.y);
-            g.lineTo(to.x, to.y);
+
+            g.moveTo(
+                from.x,
+                from.y
+            );
+
+            g.lineTo(
+                to.x,
+                to.y
+            );
+
             g.strokePath();
         }
     }
@@ -226,6 +383,38 @@ export class NodeMapScene extends Phaser.Scene {
     _drawOneNode(node, pos, isActive, isAvailable, isCleared) {
         const isMini = node.isMini;
         const isBoss = node.type === NODE_TYPE.BOSS;
+            if (isBoss) {
+                    this.cameras.main.shake(
+                        150,
+                        0.002
+                    );
+                for (let i = 0; i < 8; i++) {
+                    const ember =
+                        this.add.circle(
+                            pos.x,
+                            pos.y,
+                            2,
+                            0xff8b42,
+                            0.8
+                        );
+                    this.tweens.add({
+                        targets: ember,
+                        x:
+                            pos.x +
+                            Phaser.Math.Between(-28, 28),
+                        y:
+                            pos.y -
+                            Phaser.Math.Between(15, 40),
+                        alpha: 0,
+                        duration:
+                            Phaser.Math.Between(
+                                900,
+                                1500
+                            ),
+                        repeat: -1,
+                    });
+                }
+            }
 
         const radius =
             isBoss ? 30 :
@@ -250,31 +439,55 @@ export class NodeMapScene extends Phaser.Scene {
                 : 0x1a1a2e;
 
         // glow available
-if (isAvailable) {
-    const glow =
-        this.add.circle(
-            pos.x,
-            pos.y,
-            radius + 18,
-            color,
-            0.22
-        );
+        if (isAvailable) {
+            const glow =
+                this.add.circle(
+                    pos.x,
+                    pos.y,
+                    radius + 18,
+                    color,
+                    0.22
+                );
 
-    this.tweens.add({
-        targets: glow,
-        alpha: {
-            from: 0.08,
-            to: 0.35,
-        },
-        scale: {
-            from: 1,
-            to: 1.12,
-        },
-        duration: 1000,
-        yoyo: true,
-        repeat: -1,
-    });
-}
+            this.tweens.add({
+                targets: glow,
+                alpha: {
+                    from: 0.08,
+                    to: 0.35,
+                },
+                scale: {
+                    from: 1,
+                    to: 1.12,
+                },
+                duration: 1000,
+                yoyo: true,
+                repeat: -1,
+            });
+        }
+
+        if (isActive) {
+        const ring =
+            this.add.circle(
+                pos.x,
+                pos.y,
+                radius + 10,
+                color,
+                0
+            )
+            .setStrokeStyle(
+                2,
+                0xffcc44,
+                0.7
+            );
+
+        this.tweens.add({
+            targets: ring,
+            scale: 1.15,
+            alpha: 0,
+            duration: 1000,
+            repeat: -1,
+        });
+    }
 
         // node utama
         const circle =
@@ -346,41 +559,129 @@ if (isAvailable) {
                 useHandCursor: true,
             });
 
-            circle.on('pointerover', () => {
+        circle.on('pointerover',
+            () => {
                 circle.setScale(1.15);
-                this._showNodeTooltip(node, pos);
-            });
 
-            circle.on('pointerout', () => {
+                this.tweens.add({
+                    targets: circle,
+                    y: pos.y - 4,
+                    duration: 120,
+                });
+
+                this._showNodeTooltip(
+                    node,
+                    pos
+                );
+
+                const aura =
+                    this.add.circle(
+                        pos.x,
+                        pos.y,
+                        radius + 22,
+                        color,
+                        0.18
+                    );
+
+                this.tweens.add({
+                    targets: aura,
+                    scale: 1.2,
+                    alpha: 0,
+                    duration: 450,
+                });
+            }
+        );
+
+        circle.on(
+            'pointerout',
+            () => {
                 circle.setScale(1);
-                this._hideNodeTooltip();
-            });
 
-            circle.on('pointerdown', () => {
-                this._enterNode(node);
+                this.tweens.add({
+                    targets: circle,
+                    y: pos.y,
+                    duration: 120,
+                });
+
+                this._hideNodeTooltip();
+            }
+        );
+
+                    circle.on('pointerdown', () => {
+                        this._enterNode(node);
+                    });
+                }
+
+                if (isActive) {
+            circle.setFillStyle(
+                0x1b2138,
+                1
+            );
+
+            this.tweens.add({
+                targets: circle,
+                scale: 1.10,
+                duration: 650,
+                yoyo: true,
+                repeat: -1,
             });
         }
 
-        if (isActive) {
-    circle.setFillStyle(
-        0x1b2138,
-        1
-    );
-
-    this.tweens.add({
-        targets: circle,
-        scale: 1.10,
-        duration: 650,
-        yoyo: true,
-        repeat: -1,
-    });
-}
-
     }
 
+    _buildCursePreview() {
+        const box =
+            this.add.rectangle(
+                GAME_WIDTH - 95,
+                GAME_HEIGHT - 48,
+                170,
+                54,
+                0x120b18,
+                0.95
+            )
+            .setStrokeStyle(
+                1,
+                0x7a3cff
+            );
 
+        const title =
+            this.add.text(
+                GAME_WIDTH - 95,
+                GAME_HEIGHT - 60,
+                `☠ Curse ${this.curseLevel}`,
+                {
+                    fontFamily: 'monospace',
+                    fontSize: '11px',
+                    color: '#dcb7ff',
+                }
+            )
+            .setOrigin(0.5);
+
+        const desc =
+            this.add.text(
+                GAME_WIDTH - 95,
+                GAME_HEIGHT - 38,
+                '+Enemy dmg / +Rare drop',
+                {
+                    fontFamily: 'monospace',
+                    fontSize: '9px',
+                    color: '#9fa6d9',
+                }
+            )
+            .setOrigin(0.5);
+
+        this.tweens.add({
+            targets: [box, title],
+            alpha: {
+                from: 0.85,
+                to: 1,
+            },
+            duration: 1300,
+            yoyo: true,
+            repeat: -1,
+        });
+    }
     // ── Tooltip ───────────────────────────────────────────────
-
     _showNodeTooltip(node, pos) {
         this._hideNodeTooltip();
         const labels = {
@@ -410,7 +711,6 @@ if (isAvailable) {
     }
 
     // ── Legend ────────────────────────────────────────────────
-
     _buildLegend() {
         const items = [
             { type: NODE_TYPE.COMBAT,   label: 'Combat'   },
@@ -441,7 +741,7 @@ if (isAvailable) {
 
     _buildMenuButton() {
         // Tombol Menu (kanan atas)
-        const menuBg = this.add.rectangle(GAME_WIDTH - 50, 28, 70, 26, 0x0d0d1a)
+        const menuBg = this.add.rectangle(GAME_WIDTH - 45, 28, 70, 26, 0x0d0d1a)
             .setStrokeStyle(1, 0x222233)
             .setInteractive({ useHandCursor: true });
         const menuTxt = this.add.text(GAME_WIDTH - 50, 28, '☰ Menu', {
@@ -469,11 +769,23 @@ if (isAvailable) {
     }
 
     _openDeckViewer() {
+        const defaultDeck =
+        SaveSystem.getStarterDeck?.() || [];
+
         const allCards = [
             ...(this.playerData?.deck    || []),
             ...(this.playerData?.discard || []),
             ...(this.playerData?.hand    || []),
         ];
+
+        DeckViewerOverlay.show(
+        this,
+        allCards,
+        {
+            canPurge: false,
+            canUpgrade: false,
+        }
+    );
 
         if (allCards.length === 0) return;
 
@@ -484,9 +796,6 @@ if (isAvailable) {
     }
 
     // ── Pause Menu ────────────────────────────────────────────
-
-    // ── Pause Menu ────────────────────────────────────────────
-
     _openPauseMenu() {
         if (this._pauseOpen) return;
         this._pauseOpen = true;
@@ -567,118 +876,245 @@ if (isAvailable) {
     }
 
     // ── Floor Entry Notif ─────────────────────────────────────
-
     _showFloorEntryNotif() {
         const label = this.isBossFloor
             ? `⚠ BOSS — B${this.floor}`
             : `B${this.floor}`;
 
-        const txt = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, label, {
+        const txt = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, label, 
+            {
             fontFamily: 'monospace', fontSize: '44px', fontStyle: 'bold',
             color: this.isBossFloor ? '#cc4433' : '#cc8833', alpha: 0,
         }).setOrigin(0.5).setDepth(20);
 
+        const sub =
+            this.add.text(
+                GAME_WIDTH / 2,
+                GAME_HEIGHT / 2 + 42,
+                this.isBossFloor
+                    ? 'Yokai Presence Detected'
+                    : 'Choose your next path',
+                {
+                    fontFamily: 'monospace',
+                    fontSize: '12px',
+                    color: '#9fb3d9',
+                }
+            )
+            .setOrigin(0.5)
+            .setDepth(20)
+            .setAlpha(0);
+
         this.tweens.add({
-            targets: txt, alpha: { from: 0, to: 1 },
-            y: { from: GAME_HEIGHT / 2 + 20, to: GAME_HEIGHT / 2 },
+            targets: [txt, sub],
+            alpha: { from: 0, to: 1 },
+            y: {
+                from: GAME_HEIGHT / 2 + 20,
+                to: GAME_HEIGHT / 2,
+            },
             duration: 350,
             onComplete: () => {
-                this.time.delayedCall(700, () => {
+                this.time.delayedCall(900, () => {
                     this.tweens.add({
-                        targets: txt, alpha: 0, duration: 350,
-                        onComplete: () => txt.destroy(),
+                        targets: [txt, sub],
+                        alpha: 0,
+                        duration: 350,
+                        onComplete: () => {
+                            txt.destroy();
+                            sub.destroy();
+                        },
                     });
                 });
             },
         });
+
         if (this.isBossFloor) {
-    this.cameras.main.shake(
-        300,
-        0.003
-    );
-}
+            this.cameras.main.shake(
+                300,
+                0.003
+            );
+        }
     }
 
     // ── Navigation ────────────────────────────────────────────
-
     _enterNode(node) {
-        const prevNodeId = this.currentNodeId;
-        const prevNode   = this.mapData.nodes.find(n => n.id === prevNodeId);
-        if (prevNode) prevNode.cleared = true;
-        this.currentNodeId = node.id;
+        const prevNodeId =
+            this.currentNodeId;
 
-        // Checkpoint: simpan posisi sebelum masuk node
-        // Sehingga kalau refresh, player kembali ke peta di posisi sebelumnya
+        const prevNode =
+            this.mapData.nodes.find(
+                n => n.id === prevNodeId
+            );
+
+        if (prevNode) {
+            prevNode.cleared = true;
+        }
+
+        // node aktif pindah
+        this.currentNodeId =
+            node.id;
+
+        // node pernah dikunjungi
+        if (
+            !this.visitedNodes.includes(
+                node.id
+            )
+        ) {
+            this.visitedNodes.push(
+                node.id
+            );
+        }
+
+        // edge yg benar2 dipilih
+        this.pathHistory.push({
+            from: prevNodeId,
+            to: node.id,
+        });
+
+        // route chain
+        this.selectedPath.push(
+            node.id
+        );
+
         SaveSystem.checkpointSave({
-            zone:        this.zone,
-            floor:       this.floor,
-            curseLevel:  this.curseLevel,
-            playerData:  this.playerData,
-            mapData:     this.mapData,
-            prevNodeId,          // posisi sebelum masuk node ini
+            zone: this.zone,
+            floor: this.floor,
+            curseLevel: this.curseLevel,
+            playerData: this.playerData,
+            mapData: this.mapData,
+
+            currentNodeId:
+                this.currentNodeId,
+
+            visitedNodes:
+                this.visitedNodes,
+
+            selectedPath:
+                this.selectedPath,
+
+            pathHistory:
+                this.pathHistory,
         });
 
         const sceneData = {
-            zone:          this.zone,
-            floor:         this.floor,
-            curseLevel:    this.curseLevel,
-            playerName:    this.playerName,
-            playerData:    this.playerData,
-            mapData:       this.mapData,
-            currentNodeId: this.currentNodeId,
+            zone: this.zone,
+            floor: this.floor,
+            curseLevel:
+                this.curseLevel,
+
+            playerData:
+                this.playerData,
+
+            mapData:
+                this.mapData,
+
+            currentNodeId:
+                this.currentNodeId,
+
+            visitedNodes:
+                this.visitedNodes,
+
+            selectedPath:
+                this.selectedPath,
+
+            pathHistory:
+                this.pathHistory,
         };
 
         switch (node.type) {
             case NODE_TYPE.COMBAT:
-                this.scene.start(SCENE.COMBAT, { ...sceneData, isBoss: false, isElite: false });
+                this.scene.start(
+                    SCENE.COMBAT,
+                    {
+                        ...sceneData,
+                        isBoss: false,
+                        isElite: false,
+                    }
+                );
                 break;
 
             case NODE_TYPE.ELITE:
-                // Elite biasa atau mini boss
-                this.scene.start(SCENE.COMBAT, {
-                    ...sceneData,
-                    isBoss:   false,
-                    isElite:  true,
-                    isMini:   node.isMini || false,
-                });
+                this.scene.start(
+                    SCENE.COMBAT,
+                    {
+                        ...sceneData,
+                        isBoss: false,
+                        isElite: true,
+                        isMini:
+                            node.isMini || false,
+                    }
+                );
                 break;
 
             case NODE_TYPE.SHOP:
-                this.scene.start(SCENE.SHOP, sceneData);
+                this.scene.start(
+                    SCENE.SHOP,
+                    sceneData
+                );
                 break;
 
             case NODE_TYPE.REST:
-                this.scene.start(SCENE.REST, sceneData);
+                this.scene.start(
+                    SCENE.REST,
+                    sceneData
+                );
                 break;
 
             case NODE_TYPE.EVENT:
-                this.scene.start(SCENE.EVENT, sceneData);
+                this.scene.start(
+                    SCENE.EVENT,
+                    sceneData
+                );
                 break;
 
             case NODE_TYPE.SHRINE:
-                this.scene.start(SCENE.SHRINE, sceneData);
+                this.scene.start(
+                    SCENE.SHRINE,
+                    sceneData
+                );
                 break;
 
             case NODE_TYPE.TREASURE:
-                this.scene.start(SCENE.REWARD, { ...sceneData, isTreasure: true });
+                this.scene.start(
+                    SCENE.REWARD,
+                    {
+                        ...sceneData,
+                        isTreasure: true,
+                    }
+                );
                 break;
 
             case NODE_TYPE.BOSS:
-                this.scene.start(SCENE.BOSS_INTRO, { ...sceneData, isBoss: true });
+                this.scene.start(
+                    SCENE.BOSS_INTRO,
+                    {
+                        ...sceneData,
+                        isBoss: true,
+                    }
+                );
                 break;
-
-            default:
-                console.warn(`[NodeMap] Tipe node tidak dikenal: ${node.type}`);
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────
-
+    _getPlayerMaxHp() {
+        return Number(
+            this.playerData?.maxHp ??
+            this.playerData?.stats?.hp_max ??
+            this.playerData?.stats?.maxHp ??
+            this.playerData?.baseStats?.hp_max ??
+            100
+        );
+    }
+    // ── Helpers ──────────────────────────────────────────────
     _getAvailableNodeIds() {
-        return NodeMapGenerator
-            .getAvailableNodes(this.currentNodeId, this.mapData.edges, this.mapData.nodes)
-            .filter(n => !n.cleared)
-            .map(n => n.id);
+        const edges = this.mapData.edges;
+
+        return edges
+            .filter(
+                e => e.from === this.currentNodeId
+            )
+            .map(
+                e => e.to
+            );
     }
 
     _isAvailable(node) {
