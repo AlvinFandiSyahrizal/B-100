@@ -1,6 +1,3 @@
-// ============================================================
-// NodeMapGenerator.js — generate node map per lantai
-//
 // Struktur per lantai:
 //   Start → 3-5 node (combat/event/rest/treasure/shop) → Mini Boss → Selesai
 //
@@ -23,9 +20,9 @@ export class NodeMapGenerator {
     /**
      * Generate node map untuk satu lantai.
      *
-     * @param {number} floor      - nomor lantai global (B1, B2, dst)
-     * @param {number} zone       - zona (1-10)
-     * @param {boolean} isBossFloor - true kalau lantai ini adalah boss besar (B10, B20, dst)
+     * @param {number} floor      
+     * @param {number} zone      
+     * @param {boolean} isBossFloor 
      * @returns {{ nodes, edges, floor, zone, isBossFloor }}
      */
     static generate(floor, zone, isBossFloor = false) {
@@ -68,72 +65,119 @@ export class NodeMapGenerator {
 
     // ── Floor Node Generation ─────────────────────────────────
 
-    static _generateFloorNodes(nodes, edges, floor, zone, floorInZone, nodeCount) {
-        // Kolom SELALU berurutan 1,2,3,4,5 — tidak boleh skip kolom
-        // Tiap kolom PASTI ada minimal 1 node
-        // Hanya kolom tengah (3) yang bisa dapat 2 node
+    static _generateFloorNodes(
+        nodes,
+        edges,
+        floor,
+        zone,
+        floorInZone,
+        nodeCount
+    ) {
+        // tiap kolom bisa 1–3 row
+        const ROWS = [0, 1, 2];
 
         for (let col = 1; col <= LAYOUT_COLS; col++) {
-            // Kolom 3: 30% chance dapat 2 node kalau nodeCount >= 5
-            const hasBranch = (col === 3 && nodeCount >= 5 && Math.random() < 0.3);
-            const rows = hasBranch ? [0, 2] : [1];
+            let amount;
+
+            // awal lantai: 2 jalur
+            if (col === 1) {
+                amount = 2;
+            }
+
+            // tengah bisa lebih rame
+            else if (col === 2 || col === 3) {
+                amount = this._randInt(2, 3);
+            }
+
+            // mendekati mini boss
+            else {
+                amount = this._randInt(1, 2);
+            }
+
+            // random pilih row unik
+            const rows = [...ROWS]
+                .sort(() => Math.random() - 0.5)
+                .slice(0, amount)
+                .sort();
 
             for (const row of rows) {
-                const type = this._pickNodeType(zone, col, floorInZone);
                 nodes.push({
-                    id:      `n_${col}_${row}`,
+                    id: `n_${col}_${row}`,
                     col,
                     row,
-                    type,
+                    type: this._pickNodeType(
+                        zone,
+                        col,
+                        floorInZone
+                    ),
                     floor,
                     cleared: false,
                 });
             }
         }
 
-        // Mini boss selalu di kolom LAYOUT_COLS + 1
+        // mini boss
         const lastCol = LAYOUT_COLS + 1;
+
         nodes.push({
-            id:      'mini_boss',
-            col:     lastCol,
-            row:     1,
-            type:    NODE_TYPE.ELITE,
-            isMini:  true,
+            id: 'mini_boss',
+            col: lastCol,
+            row: 1,
+            type: NODE_TYPE.ELITE,
+            isMini: true,
             floor,
             cleared: false,
         });
 
-        // Generate edges — setiap node PASTI terhubung ke node berikutnya
+        // edges
         const byCol = this._groupByCol(nodes);
 
-        for (let col = 0; col <= lastCol; col++) {
-            const current = byCol[col] || [];
-            const next    = byCol[col + 1] || [];
-            if (next.length === 0) continue;
+        for (let col = 0; col < lastCol; col++) {
+            const current =
+                byCol[col] || [];
+
+            const next =
+                byCol[col + 1] || [];
 
             for (const node of current) {
-                // Pilih 1 node terdekat di kolom berikutnya sebagai target utama
-                const sorted = [...next].sort(
-                    (a, b) => Math.abs(a.row - node.row) - Math.abs(b.row - node.row)
-                );
-                // Selalu ada minimal 1 koneksi
-                edges.push({ from: node.id, to: sorted[0].id });
+                const targets =
+                    this._pickTargets(
+                        node,
+                        next
+                    );
 
-                // 35% chance dapat koneksi kedua (bercabang)
-                if (sorted.length > 1 && Math.random() < 0.35) {
-                    edges.push({ from: node.id, to: sorted[1].id });
+                for (const target of targets) {
+                    edges.push({
+                        from: node.id,
+                        to: target.id,
+                    });
                 }
             }
         }
 
-        // Deduplikasi edges
+        // pastikan semua kebagian jalur
+        this._ensureConnectivity(
+            nodes,
+            edges,
+            byCol
+        );
+
+        // dedupe
         const seen = new Set();
-        const deduped = edges.filter(e => {
-            const key = `${e.from}->${e.to}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
+
+        const deduped =
+            edges.filter(e => {
+                const key =
+                    `${e.from}->${e.to}`;
+
+                if (seen.has(key)) {
+                    return false;
+                }
+
+                seen.add(key);
+                return true;
+            });
+
         edges.length = 0;
         edges.push(...deduped);
     }
