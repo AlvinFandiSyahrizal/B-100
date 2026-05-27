@@ -6,6 +6,7 @@
 import { SCENE, GAME_WIDTH, GAME_HEIGHT, STAT } from '../config/constants.js';
 import { DeckViewerOverlay } from '../ui/DeckViewerOverlay.js';
 import { DeckSystem } from '../systems/DeckSystem.js';
+import { getCard } from '../data/cards/index.js';
 
 const HEAL_PERCENT = 0.30;  // heal 30% dari HP max
 
@@ -69,9 +70,13 @@ export class RestScene extends Phaser.Scene {
 
     _buildOptions() {
         // ── Opsi 1: Heal ──────────────────────────────────────
-        const healAmt = this.playerData
-            ? Math.floor(this.playerData.stats?.[STAT.HP_MAX] * HEAL_PERCENT)
-            : '30%';
+        const hpMax =
+            this._getPlayerMaxHp();
+
+        const healAmt =
+            Math.floor(
+                hpMax * HEAL_PERCENT
+            );
 
         this._createOption(
             GAME_WIDTH / 2 - 175,
@@ -155,19 +160,46 @@ export class RestScene extends Phaser.Scene {
     }
 
     // ── Actions ───────────────────────────────────────────────
-
     _doHeal(amount) {
         this.actionTaken = true;
 
         if (this.playerData) {
-            const hpMax     = this.playerData.stats?.hp_max || 100;
-            const healAmt   = typeof amount === 'number' ? amount : Math.floor(hpMax * 0.3);
-            this.playerData.hp = Math.min(hpMax, (this.playerData.hp || 0) + healAmt);
-            console.log(`[Rest] Healed ${healAmt} HP. Now: ${this.playerData.hp}/${hpMax}`);
+            const hpMax =
+                this._getPlayerMaxHp();
+
+            const currentHp =
+                Number(
+                    this.playerData.hp ?? 0
+                );
+
+            const healAmt =
+                typeof amount === 'number'
+                    ? amount
+                    : Math.floor(
+                        hpMax * 0.3
+                    );
+
+            this.playerData.hp =
+                Math.min(
+                    hpMax,
+                    currentHp + healAmt
+                );
+
+            console.log(
+                `[Rest] Healed ${healAmt}. ` +
+                `${this.playerData.hp}/${hpMax}`
+            );
         }
 
-        this._showFeedback('❤️  HP dipulihkan!', '#44cc44');
-        this.time.delayedCall(1200, () => this._leave());
+        this._showFeedback(
+            '❤️ HP dipulihkan!',
+            '#44cc44'
+        );
+
+        this.time.delayedCall(
+            1200,
+            () => this._leave()
+        );
     }
 
     _doUpgrade() {
@@ -195,28 +227,67 @@ export class RestScene extends Phaser.Scene {
             onUpgrade: (card) => {
                 if (!card.upgradedId) return;
 
-                const deck = this.playerData.deck    || [];
-                const disc = this.playerData.discard || [];
+                const upgradedCard =
+                    getCard(card.upgradedId);
 
-                // Cari di deck dulu
-                let idx = deck.findIndex(c => c.id === card.id);
+                if (!upgradedCard) {
+                    console.warn(
+                        '[Rest] upgrade card not found:',
+                        card.upgradedId
+                    );
+                    return;
+                }
+
+                const deck =
+                    this.playerData.deck || [];
+
+                const disc =
+                    this.playerData.discard || [];
+
+                // cari di deck
+                let idx =
+                    deck.findIndex(
+                        c => c.id === card.id
+                    );
+
                 if (idx !== -1) {
-                    deck[idx] = { ...deck[idx], id: card.upgradedId, isUpgraded: true, upgradedId: null };
+                    deck[idx] = {
+                        ...upgradedCard
+                    };
                 } else {
-                    // Cari di discard
-                    idx = disc.findIndex(c => c.id === card.id);
+                    // cari di discard
+                    idx =
+                        disc.findIndex(
+                            c => c.id === card.id
+                        );
+
                     if (idx !== -1) {
-                        disc[idx] = { ...disc[idx], id: card.upgradedId, isUpgraded: true, upgradedId: null };
+                        disc[idx] = {
+                            ...upgradedCard
+                        };
                     }
                 }
 
-                this._showFeedback(`⬆️  ${card.name} diupgrade!`, '#44cc88');
-                this.time.delayedCall(1200, () => this._leave());
-            },
-            onClose: () => {
-                this.actionTaken = false;
+                this._showFeedback(
+                    `⬆️ ${upgradedCard.name}!`,
+                    '#44cc88'
+                );
+
+                this.time.delayedCall(
+                    1200,
+                    () => this._leave()
+                );
             },
         });
+    }
+    _getPlayerMaxHp() {
+        return Number(
+            this.playerData?.maxHp ??
+            this.playerData?.stats?.hp_max ??
+            this.playerData?.stats?.maxHp ??
+            this.playerData?.baseStats?.hp_max ??
+            100
+        );
     }
 
     _showFeedback(msg, color) {

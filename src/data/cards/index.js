@@ -19,10 +19,18 @@ export const ALL_CARDS = {
 
 export function getCard(id) {
     const card = ALL_CARDS[id];
-    if (!card) console.warn(`[Cards] Kartu tidak ditemukan: "${id}"`);
-    return card || null;
-}
 
+    if (!card) {
+        console.warn(
+            `[Cards] Kartu tidak ditemukan: "${id}"`
+        );
+        return null;
+    }
+
+    return {
+        ...card
+    };
+}
 export function getAllCardsArray() {
     return Object.values(ALL_CARDS);
 }
