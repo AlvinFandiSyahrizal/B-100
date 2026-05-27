@@ -166,7 +166,14 @@ export class NodeMapScene extends Phaser.Scene {
         for (const node of nodes) {
             const x        = MAP_START_X + (node.col / Math.max(maxCol, 1)) * (MAP_END_X - MAP_START_X);
             const rowIndex = allRows.indexOf(node.row);
-            const y        = MAP_START_Y + ((rowIndex + 1) / (rowCount + 1)) * totalH;
+            const y =
+    MAP_START_Y +
+    ((rowIndex + 1) / (rowCount + 1)) *
+        totalH +
+    Phaser.Math.Between(
+        -18,
+        18
+    );
             positions[node.id] = { x, y };
         }
 
@@ -187,9 +194,9 @@ export class NodeMapScene extends Phaser.Scene {
             const cleared   = fromNode?.cleared;
 
             if (cleared && available) {
-                g.lineStyle(2, 0x445566, 0.9);
+                g.lineStyle(3, 0x8bb8ff, 0.95 );
             } else if (cleared) {
-                g.lineStyle(1, 0x334455, 0.5);
+                g.lineStyle(2, 0x405070, 0.65);
             } else {
                 g.lineStyle(1, 0x1a1a2e, 0.4);
             }
@@ -217,53 +224,160 @@ export class NodeMapScene extends Phaser.Scene {
     }
 
     _drawOneNode(node, pos, isActive, isAvailable, isCleared) {
-        const isMini   = node.isMini;
-        const isBoss   = node.type === NODE_TYPE.BOSS;
-        const radius   = isBoss ? 30 : isMini ? 26 : 22;
-        const color    = NODE_COLORS[node.type] || 0x444466;
-        const icon     = isMini ? '⚡' : (NODE_ICONS[node.type] || '?');
+        const isMini = node.isMini;
+        const isBoss = node.type === NODE_TYPE.BOSS;
 
-        const circle = this.add.circle(pos.x, pos.y, radius, 0x111122)
+        const radius =
+            isBoss ? 30 :
+            isMini ? 26 :
+            22;
+
+        const color =
+            NODE_COLORS[node.type] || 0x444466;
+
+        const icon =
+            isMini
+                ? '⚡'
+                : (NODE_ICONS[node.type] || '?');
+
+        const strokeColor =
+            isActive
+                ? 0xffcc44
+                : isAvailable
+                ? color
+                : isCleared
+                ? 0x223333
+                : 0x1a1a2e;
+
+        // glow available
+if (isAvailable) {
+    const glow =
+        this.add.circle(
+            pos.x,
+            pos.y,
+            radius + 18,
+            color,
+            0.22
+        );
+
+    this.tweens.add({
+        targets: glow,
+        alpha: {
+            from: 0.08,
+            to: 0.35,
+        },
+        scale: {
+            from: 1,
+            to: 1.12,
+        },
+        duration: 1000,
+        yoyo: true,
+        repeat: -1,
+    });
+}
+
+        // node utama
+        const circle =
+            this.add.circle(
+                pos.x,
+                pos.y,
+                radius,
+                0x111122,
+                0.95
+            )
             .setStrokeStyle(
-                isActive    ? 3 : isAvailable ? 2 : 1,
-                isActive    ? 0xffcc44
-                : isAvailable ? color
-                : isCleared   ? 0x223333
-                : 0x1a1a2e
+                isActive ? 3 :
+                isAvailable ? 2 : 1,
+                strokeColor
             );
 
-        this.add.text(pos.x, pos.y - 4, icon, {
-            fontFamily: 'monospace',
-            fontSize:   isBoss ? '22px' : '16px',
-            color:      isCleared && !isActive ? '#222233' : '#ffffff',
-        }).setOrigin(0.5);
+        // active pulse
+        if (isActive) {
+            this.tweens.add({
+                targets: circle,
+                scale: 1.08,
+                duration: 700,
+                yoyo: true,
+                repeat: -1,
+            });
+        }
 
-        // Label tipe node
-        const typeLabel = isMini ? 'Mini Boss'
-            : isBoss ? 'BOSS'
-            : node.type;
+        // icon
+        this.add.text(
+            pos.x,
+            pos.y - 4,
+            icon,
+            {
+                fontFamily: 'monospace',
+                fontSize:
+                    isBoss ? '22px' : '16px',
+                color:
+                    isCleared && !isActive
+                        ? '#222233'
+                        : '#ffffff',
+            }
+        ).setOrigin(0.5);
 
-        this.add.text(pos.x, pos.y + radius + 8, typeLabel, {
-            fontFamily: 'monospace', fontSize: '9px',
-            color: isAvailable ? '#556677' : '#222233',
-        }).setOrigin(0.5);
+        // label bawah
+        const typeLabel =
+            isMini
+                ? 'Mini Boss'
+                : isBoss
+                ? 'BOSS'
+                : node.type;
 
+        this.add.text(
+            pos.x,
+            pos.y + radius + 8,
+            typeLabel,
+            {
+                fontFamily: 'monospace',
+                fontSize: '9px',
+                color:
+                    isAvailable
+                        ? '#556677'
+                        : '#222233',
+            }
+        ).setOrigin(0.5);
+
+        // klik hover
         if (isAvailable) {
-            circle.setInteractive({ useHandCursor: true });
+            circle.setInteractive({
+                useHandCursor: true,
+            });
 
             circle.on('pointerover', () => {
                 circle.setScale(1.15);
                 this._showNodeTooltip(node, pos);
             });
+
             circle.on('pointerout', () => {
                 circle.setScale(1);
                 this._hideNodeTooltip();
             });
+
             circle.on('pointerdown', () => {
                 this._enterNode(node);
             });
         }
+
+        if (isActive) {
+    circle.setFillStyle(
+        0x1b2138,
+        1
+    );
+
+    this.tweens.add({
+        targets: circle,
+        scale: 1.10,
+        duration: 650,
+        yoyo: true,
+        repeat: -1,
+    });
+}
+
     }
+
 
     // ── Tooltip ───────────────────────────────────────────────
 
@@ -477,6 +591,12 @@ export class NodeMapScene extends Phaser.Scene {
                 });
             },
         });
+        if (this.isBossFloor) {
+    this.cameras.main.shake(
+        300,
+        0.003
+    );
+}
     }
 
     // ── Navigation ────────────────────────────────────────────
