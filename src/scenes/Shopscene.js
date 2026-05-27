@@ -224,33 +224,100 @@ export class ShopScene extends Phaser.Scene {
     }
 
     _openPurgeViewer() {
+        // guard kalau gold kurang
+        if (this.gold < PURGE_COST) {
+            this._showNotif(
+                `Gold tidak cukup! Butuh 💰 ${PURGE_COST}`,
+                '#cc4444'
+            );
+            return;
+        }
+
         const allCards = [
-            ...(this.playerData?.deck    || []),
+            ...(this.playerData?.deck || []),
             ...(this.playerData?.discard || []),
         ];
-        DeckViewerOverlay.show(this, allCards, {
-            canPurge:   true,
-            purgePrice: PURGE_COST,
-            onPurge: (card) => {
-                // Kurangi gold
-                this.gold -= PURGE_COST;
-                if (this.playerData) this.playerData.gold = this.gold;
-                this.goldText?.setText(`💰 ${this.gold}`);
 
-                // Hapus kartu dari deck/discard
-                const deck = this.playerData?.deck || [];
-                const disc = this.playerData?.discard || [];
-                let idx = deck.findIndex(c => c.id === card.id);
-                if (idx !== -1) { deck.splice(idx, 1); }
-                else {
-                    idx = disc.findIndex(c => c.id === card.id);
-                    if (idx !== -1) disc.splice(idx, 1);
+        // deck kosong
+        if (!allCards.length) {
+            this._showNotif(
+                'Deck kosong, tidak ada kartu untuk dipurge.',
+                '#cc4444'
+            );
+            return;
+        }
+
+        DeckViewerOverlay.show(this, allCards, {
+            canPurge: true,
+            purgePrice: PURGE_COST,
+
+            onPurge: (card) => {
+                // cek lagi sebelum bayar
+                if (this.gold < PURGE_COST) {
+                    this._showNotif(
+                        `Gold tidak cukup! Butuh 💰 ${PURGE_COST}`,
+                        '#cc4444'
+                    );
+                    return;
                 }
 
-                this._showNotif(`${card.name} dibuang dari deck.`, '#cc6666');
+                // bayar
+                this.gold = Math.max(
+                    0,
+                    this.gold - PURGE_COST
+                );
 
-                // Buka ulang purge viewer dengan deck yang sudah diupdate
-                this.time.delayedCall(300, () => this._openPurgeViewer());
+                if (this.playerData) {
+                    this.playerData.gold = this.gold;
+                }
+
+                this.goldText?.setText(
+                    `💰 ${this.gold}`
+                );
+
+                // hapus kartu dari deck/discard
+                const deck =
+                    this.playerData?.deck || [];
+
+                const disc =
+                    this.playerData?.discard || [];
+
+                let idx =
+                    deck.findIndex(
+                        c => c.id === card.id
+                    );
+
+                if (idx !== -1) {
+                    deck.splice(idx, 1);
+                } else {
+                    idx =
+                        disc.findIndex(
+                            c => c.id === card.id
+                        );
+
+                    if (idx !== -1) {
+                        disc.splice(idx, 1);
+                    }
+                }
+
+                this._showNotif(
+                    `${card.name} dibuang dari deck.`,
+                    '#cc6666'
+                );
+
+                // kalau gold habis jangan reopen purge
+                if (
+                    this.gold >= PURGE_COST &&
+                    (
+                        deck.length ||
+                        disc.length
+                    )
+                ) {
+                    this.time.delayedCall(
+                        300,
+                        () => this._openPurgeViewer()
+                    );
+                }
             },
         });
     }
