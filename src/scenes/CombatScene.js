@@ -20,6 +20,7 @@ import { LootSystem }                     from '../systems/LootSystem.js';
 import { GameGuard }                      from '../utils/GameGuard.js';
 import { DeckViewerOverlay }              from '../ui/DeckViewerOverlay.js';
 import { DamageNumber }                   from '../ui/DamageNumber.js';
+import { PaperDollDisplay }               from '../ui/PaperDollDisplay.js';
 
 export class CombatScene extends Phaser.Scene {
     constructor() {
@@ -289,30 +290,54 @@ export class CombatScene extends Phaser.Scene {
 
     _buildPlayerArea() {
         const px = 155, py = GAME_HEIGHT - 210;
-
-        this.add.image(px, py - 95, 'player').setScale(3).setOrigin(0.5);
-
+    
+        // ── Paper Doll ──────────────────────────────────────────
+        // Ganti this.add.image(px, py - 95, 'player') dengan PaperDollDisplay
+        this.paperDoll = new PaperDollDisplay(
+            this,           // scene
+            px,             // center X
+            py - 95,        // center Y (sama dengan posisi image lama)
+            this.player,    // player instance
+            {
+                scale:       2.4,   // scale up karena placeholder kecil
+                depth:       2,
+                interactive: false, // di combat tidak perlu klik
+            }
+        );
+        // ────────────────────────────────────────────────────────
+    
         this.add.text(px, py - 55, 'PLAYER', {
             fontFamily: 'monospace', fontSize: '10px', color: '#333355',
         }).setOrigin(0.5);
-
+    
         this.add.rectangle(px, py - 38, 200, 14, 0x1a0000).setOrigin(0.5);
         this.playerHpBar  = this.add.rectangle(px - 99, py - 38, 198, 12, 0x44cc44).setOrigin(0, 0.5);
         this.playerHpText = this.add.text(px, py - 38, '', {
             fontFamily: 'monospace', fontSize: '10px', color: '#ffffff',
         }).setOrigin(0.5);
-
+    
         this.playerBlockText = this.add.text(px, py - 18, '', {
             fontFamily: 'monospace', fontSize: '12px', color: '#4488cc',
         }).setOrigin(0.5);
-
+    
         this.energyText = this.add.text(px, py, '', {
             fontFamily: 'monospace', fontSize: '13px', color: '#cc8833',
         }).setOrigin(0.5);
-
+    
         this.playerStatusText = this.add.text(px, py + 18, '', {
             fontFamily: 'monospace', fontSize: '10px', color: '#aa6666',
         }).setOrigin(0.5);
+    }
+
+    updatePaperDoll(slot) {
+        if (!this.paperDoll) return;
+        if (slot) {
+            // Update satu slot saja — lebih efisien
+            this.paperDoll.updateSlot(slot);
+        } else {
+            // Rebuild total
+            this.paperDoll.refresh();
+        }
     }
 
     // ── Queue Area ────────────────────────────────────────────
@@ -705,6 +730,10 @@ export class CombatScene extends Phaser.Scene {
                         DamageNumber.show(this, pos.x, pos.y - 40,
                             evt.amount, evt.damageType || 'physical');
                     }
+                    // Kalau player yang kena, getarkan paper doll
+                    if (evt.target === 'player' && this.paperDoll) {
+                        this.paperDoll.playHitAnim();
+                    }
                     break;
                 }
 
@@ -1041,17 +1070,22 @@ export class CombatScene extends Phaser.Scene {
                 }
             });
 
-        } else {
-            this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, '✦ GAME OVER ✦', {
-                fontFamily: 'monospace', fontSize: '36px', color: '#cc3333',
-            }).setOrigin(0.5).setDepth(10);
-
-            this.time.delayedCall(1500, () => {
-                this.scene.start(SCENE.GAME_OVER, { floor: this.floor });
-            });
+                } else {
+                    // Play death anim paper doll dulu
+                    if (this.paperDoll) {
+                        this.paperDoll.playDeathAnim();
+                    }
+                
+                    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, '✦ GAME OVER ✦', {
+                        fontFamily: 'monospace', fontSize: '36px', color: '#cc3333',
+                    }).setOrigin(0.5).setDepth(10);
+                
+                    this.time.delayedCall(1500, () => {
+                        this.scene.start(SCENE.GAME_OVER, { floor: this.floor });
+                    });
+                }
+            }
         }
-    }
-}
 
 // ── Helper di luar class ──────────────────────────────────────
 function _statusIcon(type) {
