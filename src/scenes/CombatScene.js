@@ -146,9 +146,9 @@ export class CombatScene extends Phaser.Scene {
         this.monsterHpTexts      = [];
         this.monsterIntentIcons  = [];
         this.monsterIntentLabels = [];
-        this.monsterStatusTexts  = [];  // status effect icons
-        this.monsterTargetRings  = [];  // ring target selection
-        this.selectedTarget      = 0;   // index monster yang ditarget
+        this.monsterStatusTexts  = [];  
+        this.monsterTargetRings  = [];  
+        this.selectedTarget      = 0;   
 
         const startX = GAME_WIDTH / 2;
         const spacing = Math.min(240, (GAME_WIDTH - 200) / Math.max(this.monsters.length, 1));
@@ -158,9 +158,26 @@ export class CombatScene extends Phaser.Scene {
             const y = 220;
 
             // Target ring — lingkaran kuning saat monster ini dipilih
-            const ring = this.add.circle(x, y, 48, 0x000000, 0)
+            const ring = this.add.circle(x, y, 54, 0x000000, 0)
                 .setStrokeStyle(i === 0 ? 3 : 0, 0xffcc44)
-                .setInteractive({ useHandCursor: true });
+                .setInteractive({ useHandCursor: true })
+                .setDepth(2);
+
+            // glow target
+            const glow = this.add.circle(x, y, 68, 0xffcc44, 0.08)
+                .setVisible(i === 0)
+                .setDepth(1);
+
+            this.tweens.add({
+                targets: glow,
+                scale: { from: 1, to: 1.15 },
+                alpha: { from: 0.08, to: 0.22 },
+                duration: 700,
+                yoyo: true,
+                repeat: -1,
+            });
+
+            ring.targetGlow = glow;
             ring.on('pointerdown', () => this._selectTarget(i));
             ring.on('pointerover', () => {
                 if (i !== this.selectedTarget && !this.monsters[i]?.isDead) {
@@ -206,21 +223,63 @@ export class CombatScene extends Phaser.Scene {
                 fontFamily: 'monospace', fontSize: '10px', color: '#556677',
             }).setOrigin(0.5);
             this.monsterIntentLabels.push(intentLabel);
+
+            const targetArrow = this.add.text(
+                x,
+                y - 120,
+                '▼ TARGET',
+                {
+                    fontFamily: 'monospace',
+                    fontSize: '12px',
+                    color: '#ffcc44',
+                    fontStyle: 'bold',
+                    stroke: '#000000',
+                    strokeThickness: 3,
+                }
+            )
+            .setOrigin(0.5)
+            .setVisible(i === 0)
+            .setDepth(10);
+
+            this.monsterTargetLabels ??= [];
+            this.monsterTargetLabels.push(targetArrow);
         });
     }
 
     _selectTarget(index) {
         if (this.monsters[index]?.isDead) return;
+
         this.selectedTarget = index;
 
-        // Update visual ring
         this.monsterTargetRings.forEach((ring, i) => {
-            ring.setStrokeStyle(i === index ? 3 : 0, 0xffcc44);
+            const selected = i === index;
+
+            ring.setStrokeStyle(
+                selected ? 3 : 0,
+                0xffcc44
+            );
+
+            ring.targetGlow?.setVisible(selected);
+
+            this.monsterTargetLabels?.[i]
+                ?.setVisible(selected);
+
+            const spr = this.monsterSprites?.[i];
+
+            if (!spr) return;
+
+            this.tweens.add({
+                targets: spr,
+                y: selected
+                    ? this.nodePositions[i].y - 6
+                    : this.nodePositions[i].y,
+                scale: selected ? 3.15 : 3,
+                duration: 140,
+            });
         });
     }
 
     // ── Player Area ───────────────────────────────────────────
-
     _saveMonsterPositions() {
         this.nodePositions = {};
         this.monsterSprites.forEach((spr, i) => {
@@ -257,7 +316,6 @@ export class CombatScene extends Phaser.Scene {
     }
 
     // ── Queue Area ────────────────────────────────────────────
-
     _buildQueueArea() {
         this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 195, 'ANTRIAN AKSI', {
             fontFamily: 'monospace', fontSize: '9px', color: '#222244', letterSpacing: 2,
@@ -286,7 +344,6 @@ export class CombatScene extends Phaser.Scene {
     }
 
     // ── HUD ───────────────────────────────────────────────────
-
     _buildHUD() {
         this.deckText = this.add.text(GAME_WIDTH - 50, GAME_HEIGHT - 50, '', {
             fontFamily: 'monospace', fontSize: '11px', color: '#2a3a4a',
@@ -327,7 +384,6 @@ export class CombatScene extends Phaser.Scene {
     }
 
     // ── Action Buttons ────────────────────────────────────────
-
     _buildActionButtons() {
         // ATTACK button
         const ax = GAME_WIDTH - 110, ay = GAME_HEIGHT - 135;
@@ -375,7 +431,6 @@ export class CombatScene extends Phaser.Scene {
     }
 
     // ── Tooltip ───────────────────────────────────────────────
-
     _buildTooltip() {
         this.tooltipBg = this.add.rectangle(0, 0, 230, 175, 0x080812)
             .setStrokeStyle(1, 0x223344)
@@ -436,7 +491,6 @@ export class CombatScene extends Phaser.Scene {
     }
 
     // ── Card Rendering ────────────────────────────────────────
-
     _renderHand() {
         // Destroy kartu lama dengan aman
         if (this.cardObjects) {
@@ -529,6 +583,22 @@ export class CombatScene extends Phaser.Scene {
                 holdTimer = this.time.delayedCall(600, () => {
                     if (isHovered) this._showTooltip(card, x, y - 18);
                 });
+                if (card.damage) {
+                    const ring =
+                        this.monsterTargetRings?.[
+                            this.selectedTarget
+                        ];
+
+                    if (ring) {
+                        this.tweens.add({
+                            targets: ring,
+                            scale: 1.18,
+                            duration: 120,
+                            yoyo: true,
+                            repeat: 1,
+                        });
+                    }
+                }
             });
 
             bg.on('pointerout', () => {
@@ -553,7 +623,6 @@ export class CombatScene extends Phaser.Scene {
     }
 
     // ── Queue ─────────────────────────────────────────────────
-
     _addToQueue(card, handIndex) {
         this.selectedQueue.push({ card, handIndex });
         this.queueEnergyCost += card.cost;
@@ -589,7 +658,6 @@ export class CombatScene extends Phaser.Scene {
     }
 
     // ── Actions ───────────────────────────────────────────────
-
     _doAttack() {
         if (this.selectedQueue.length === 0) return;
         if (this.combat.state !== COMBAT_STATE.PLAYER_TURN) return;
@@ -761,7 +829,6 @@ export class CombatScene extends Phaser.Scene {
     }
 
     // ── UI Refresh ────────────────────────────────────────────
-
     _refreshUI() {
         const p = this.player;
         if (!p) return;
@@ -823,9 +890,7 @@ export class CombatScene extends Phaser.Scene {
         });
     }
     
-
     // ── Menu Button & Pause Menu ──────────────────────────────
-
     _buildMenuButton() {
         const bg = this.add.rectangle(GAME_WIDTH - 50, 28, 70, 26, 0x0d0d1a)
             .setStrokeStyle(1, 0x222233)
@@ -939,7 +1004,6 @@ export class CombatScene extends Phaser.Scene {
     }
 
     // ── Combat End ────────────────────────────────────────────
-
     _handleCombatEnd() {
         this.input.enabled = false;
         this._hideTooltip();
