@@ -69,7 +69,11 @@ export class CombatScene extends Phaser.Scene {
         this._pauseObjects   = [];
     }
 
-    create() {
+    async create() {
+        console.log(
+    'companions:',
+    companions
+);
         // Spawn monster atau boss sesuai tipe combat
         if (this.isBoss) {
             const bossData = getBossForZone(this.zone);
@@ -91,7 +95,8 @@ export class CombatScene extends Phaser.Scene {
             }
         }
 
-        this.combat = new CombatSystem(this.player, this.monsters);
+        const companions = await this._buildCompanions();
+        this.combat = new CombatSystem(this.player, this.monsters, companions);
         this.combat.start();
 
         // Build UI
@@ -245,6 +250,24 @@ export class CombatScene extends Phaser.Scene {
             this.monsterTargetLabels ??= [];
             this.monsterTargetLabels.push(targetArrow);
         });
+    }
+
+    async _buildCompanions() {
+        const { Companion } =
+            await import('../entities/Companion.js');
+
+        const { getCompanion } =
+            await import('../data/companions/index.js');
+
+        return (this.player.companions || [])
+            .filter(Boolean)
+            .map(saved => {
+                const template = getCompanion(saved.id);
+                if (!template) return null;
+
+                return Companion.fromJSON(saved, template);
+            })
+            .filter(Boolean);
     }
 
     _selectTarget(index) {
@@ -649,8 +672,13 @@ export class CombatScene extends Phaser.Scene {
 
     // ── Queue ─────────────────────────────────────────────────
     _addToQueue(card, handIndex) {
-        this.selectedQueue.push({ card, handIndex });
-        this.queueEnergyCost += card.cost;
+        const cost =
+            this.combat.getEffectiveCost(card);
+        this.selectedQueue.push({
+            card,
+            handIndex,
+        });
+        this.queueEnergyCost += cost;
         this._refreshQueue();
         this._refreshUI();
         this._renderHand();
