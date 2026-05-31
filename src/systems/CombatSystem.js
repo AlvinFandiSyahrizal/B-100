@@ -1,9 +1,10 @@
 // ============================================================
 // CombatSystem.js — engine combat turn-based
-// Update: companion aksi setelah enemy turn, sebelum player turn
+// Update Step 8: element multiplier (Gogyō) saat damage
 // ============================================================
 
-import { DeckSystem }  from './DeckSystem.js';
+import { DeckSystem }      from './DeckSystem.js';
+import { ElementSystem }   from './ElementSystem.js';
 import {
     ENERGY_PER_TURN, HAND_SIZE, STAT, DMG_TYPE
 } from '../config/constants.js';
@@ -17,20 +18,14 @@ export const COMBAT_STATE = {
 
 export class CombatSystem {
 
-    /**
-     * @param {object}   player     — Player instance
-     * @param {object[]} monsters   — array Monster instance
-     * @param {object[]} companions — array Companion instance (maks 2, boleh kosong)
-     */
     constructor(player, monsters, companions = []) {
         this.player     = player;
         this.monsters   = monsters;
-        this.companions = companions.filter(Boolean);   // buang null/undefined
+        this.companions = companions.filter(Boolean);
         this.state      = COMBAT_STATE.PLAYER_TURN;
         this.turn       = 1;
         this.log        = [];
 
-        // Tentukan siapa yang jalan duluan berdasarkan AGI
         const highestEnemyAgi = Math.max(...monsters.map(m => m.stats[STAT.AGI] || 0));
         if (highestEnemyAgi > (this.player.stats[STAT.AGI] || 0)) {
             this.state = COMBAT_STATE.ENEMY_TURN;
@@ -82,7 +77,6 @@ export class CombatSystem {
         this.player.discard.push(card);
 
         if (this.player._nextCardFree) this.player._nextCardFree = false;
-
         this.player._taikoCount = (this.player._taikoCount || 0) + 1;
 
         let events = this._resolveCard(card, targetIdx);
@@ -148,16 +142,10 @@ export class CombatSystem {
         this.state = COMBAT_STATE.ENEMY_TURN;
     }
 
-    /**
-     * Urutan:
-     * 1. Semua monster aksi
-     * 2. Companion aksi (semi-auto)  ← BARU
-     * 3. Mulai player turn
-     */
     _processEnemyTurn() {
         const allEvents = [];
 
-        // ── 1. Monster aksi ───────────────────────────────────
+        // 1. Monster aksi
         for (const monster of this.monsters) {
             if (monster.isDead) continue;
 
@@ -179,13 +167,13 @@ export class CombatSystem {
 
         if (this.state === COMBAT_STATE.LOSE) return allEvents;
 
-        // ── 2. Companion aksi ─────────────────────────────────
+        // 2. Companion aksi
         if (this.companions.length > 0 && !this._allMonstersDead()) {
             const companionEvents = this._processCompanionTurn();
             allEvents.push(...companionEvents);
         }
 
-        // ── 3. Cek win / start player turn ───────────────────
+        // 3. Cek win / mulai player turn
         if (this._allMonstersDead()) {
             this.state = COMBAT_STATE.WIN;
         } else if (this.state !== COMBAT_STATE.LOSE) {
@@ -197,10 +185,6 @@ export class CombatSystem {
 
     // ── Companion Turn ────────────────────────────────────────
 
-    /**
-     * Jalankan semua companion yang hidup.
-     * Return semua events dari companion action.
-     */
     _processCompanionTurn() {
         const allEvents = [];
 
@@ -208,9 +192,23 @@ export class CombatSystem {
             if (!companion?.alive) continue;
 
             const { events } = companion.act(this.monsters, this.player);
-            allEvents.push(...events);
 
-            // Cek kalau companion finish off monster
+            // Wrap companion damage events dengan element check
+            const enriched = events.map(evt => {
+                if (evt.type === 'companion_damage' && evt.target) {
+                    const target = this.monsters.find(m => m.id === evt.target);
+                    if (target && companion.element) {
+                        const { multiplier, reaction } = ElementSystem.applyElement(
+                            1, companion.element, target.element
+                        );
+                        return { ...evt, elementMultiplier: multiplier, elementReaction: reaction };
+                    }
+                }
+                return evt;
+            });
+
+            allEvents.push(...enriched);
+
             if (this._allMonstersDead()) {
                 this.state = COMBAT_STATE.WIN;
                 break;
@@ -247,7 +245,6 @@ export class CombatSystem {
                 this.player.addStatus('curse_cost', card.curseBenefit.costReduction, 999);
                 this.player._curseReduction = (this.player._curseReduction || 0) + card.curseBenefit.costReduction;
                 events.push({ type: 'curse_benefit', benefit: 'cost_reduction', value: card.curseBenefit.costReduction });
-                this._addLog(`Kutukan! Cost semua kartu -${card.curseBenefit.costReduction}.`);
             }
             if (card.curseBenefit?.damageBonus) {
                 this.player._damageBonus = (this.player._damageBonus || 0) + card.curseBenefit.damageBonus;
@@ -302,7 +299,6 @@ export class CombatSystem {
                     case 'haste':
                         this.player.energy += eff.value;
                         events.push({ type: 'energy_gain', amount: eff.value });
-                        this._addLog(`Haste! +${eff.value} energi.`);
                         break;
                     case 'echo':
                         this.player._echoActive = true;
@@ -341,10 +337,16 @@ export class CombatSystem {
             return [...events, ...enemyEvts];
         }
 
+        // ── Damage — dengan Element Multiplier ────────────────
         if ((card.damage || card.iaijutsu || card.desperateDmg) && (target || card.targetAll)) {
             const dmgTargets = card.targetAll
                 ? this.monsters.filter(m => !m.isDead)
                 : [target].filter(Boolean);
+
+            // Elemen penyerang: dari weapon player atau dari card itu sendiri
+            const attackerElement = card.element
+                || this.player.equipment?.weapon?.element
+                || null;
 
             for (const t of dmgTargets) {
                 let dmg = card.damage || 0;
@@ -392,6 +394,18 @@ export class CombatSystem {
 
                 if (this.player._stance === 'attack') dmg = Math.floor(dmg * 1.3);
 
+                // ── Gogyō Element Multiplier ──────────────────
+                let elementMultiplier = 1.0;
+                let elementReaction   = 'neutral';
+
+                if (attackerElement && t.element) {
+                    const result    = ElementSystem.applyElement(dmg, attackerElement, t.element);
+                    dmg             = result.finalDamage;
+                    elementMultiplier = result.multiplier;
+                    elementReaction   = result.reaction;
+                }
+                // ──────────────────────────────────────────────
+
                 const hits = card.hits || 1;
                 let totalDmg = 0;
                 for (let i = 0; i < hits; i++) {
@@ -400,11 +414,25 @@ export class CombatSystem {
 
                 const pr = t.checkPhaseTransition?.();
                 if (pr?.triggered) {
-                    events.push({ type: 'phase_change', monsterId: t.id, phaseIndex: pr.phaseIndex, announcement: pr.phase.announcement });
+                    events.push({
+                        type: 'phase_change', monsterId: t.id,
+                        phaseIndex: pr.phaseIndex, announcement: pr.phase.announcement,
+                    });
                 }
 
-                events.push({ type: 'damage', target: t.id, amount: totalDmg, hits, damageType: card.damageType });
-                this._addLog(`${t.name} kena ${totalDmg} dmg.`);
+                events.push({
+                    type:             'damage',
+                    target:           t.id,
+                    amount:           totalDmg,
+                    hits,
+                    damageType:       card.damageType,
+                    elementMultiplier,
+                    elementReaction,   // 'neutral' | 'strong' | 'weak' | 'divine'
+                    attackerElement,
+                    defenderElement:  t.element,
+                });
+
+                this._addLog(`${t.name} kena ${totalDmg} dmg. [${elementReaction}]`);
             }
 
             if (card.emptyHand) {
@@ -414,6 +442,7 @@ export class CombatSystem {
             }
         }
 
+        // ── Block ─────────────────────────────────────────────
         if (card.block) {
             let blockAmt = card.block;
             if (card.strScaling) blockAmt += Math.floor((this.player.stats['str'] || 0) * 0.3);
@@ -429,6 +458,7 @@ export class CombatSystem {
             events.push({ type: 'block', amount: blockAmt });
         }
 
+        // ── Status Effects ke musuh ───────────────────────────
         if (card.effects && target) {
             const skipTypes = ['haste', 'echo', 'focus', 'taiko', 'fortify', 'dodge'];
             for (const eff of card.effects) {
@@ -507,7 +537,6 @@ export class CombatSystem {
             const actual = this.player.takeDamage(dmg, action.damageType || 'physical');
             this.player._lastDamageTaken = actual;
             events.push({ type: 'damage', target: 'player', amount: actual, source: monster.id });
-            this._addLog(`${monster.name} serang player: ${actual} damage.`);
         }
 
         if (action.type === 'buff') {
@@ -537,7 +566,6 @@ export class CombatSystem {
                 case 'bleed':
                 case 'curse_burn':
                     this.player.takeDamage(eff.value, DMG_TYPE.TRUE);
-                    this._addLog(`${eff.type}: -${eff.value} HP.`);
                     break;
             }
             if (eff.type !== 'curse_burn' && eff.type !== 'curse_cost' &&
@@ -575,7 +603,6 @@ export class CombatSystem {
         this.player.block            = 0;
         this.player.hand             = [];
 
-        // Reset companion turn counter per combat
         for (const c of this.companions) {
             if (c) c._turnCount = 0;
         }
@@ -583,9 +610,7 @@ export class CombatSystem {
 
     // ── Helpers ───────────────────────────────────────────────
 
-    _allMonstersDead() {
-        return this.monsters.every(m => m.isDead);
-    }
+    _allMonstersDead() { return this.monsters.every(m => m.isDead); }
 
     _addLog(msg) {
         this.log.push(msg);

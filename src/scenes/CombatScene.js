@@ -70,10 +70,7 @@ export class CombatScene extends Phaser.Scene {
     }
 
     async create() {
-        console.log(
-    'companions:',
-    companions
-);
+        
         // Spawn monster atau boss sesuai tipe combat
         if (this.isBoss) {
             const bossData = getBossForZone(this.zone);
@@ -761,6 +758,10 @@ export class CombatScene extends Phaser.Scene {
                     // Kalau player yang kena, getarkan paper doll
                     if (evt.target === 'player' && this.paperDoll) {
                         this.paperDoll.playHitAnim();
+                    }
+                    break;
+                    if (evt.elementReaction && evt.elementReaction !== 'neutral') {
+                        DamageNumber.showReaction(this, pos.x, pos.y - 60, evt.elementReaction);
                     }
                     break;
                 }

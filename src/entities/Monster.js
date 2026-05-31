@@ -1,6 +1,7 @@
 // ============================================================
 // Monster.js — class monster
 // Support multi-fase untuk mini boss dan boss besar
+// Update: tambah field element untuk sistem Gogyō
 // ============================================================
 
 import { STAT, DMG_TYPE, MONSTER_SCALE_PER_FLOOR } from '../config/constants.js';
@@ -9,12 +10,16 @@ export class Monster {
     constructor(data, floor = 1) {
         this.id          = data.id;
         this.name        = data.name;
-        this.title       = data.title || '';
+        this.title       = data.title       || '';
         this.description = data.description || '';
-        this.zone        = data.zone || 1;
-        this.isBoss      = data.isBoss || false;
-        this.isMini      = data.isMini || false;
-        this.spriteKey   = data.spriteKey || 'monster_basic';
+        this.zone        = data.zone        || 1;
+        this.isBoss      = data.isBoss      || false;
+        this.isMini      = data.isMini      || false;
+        this.spriteKey   = data.spriteKey   || 'monster_basic';
+
+        // ── Elemen Gogyō ──────────────────────────────────────
+        // Dipakai ElementSystem untuk hitung damage multiplier
+        this.element = data.element || 'kodama';
 
         const scale = 1 + (floor - 1) * MONSTER_SCALE_PER_FLOOR;
 
@@ -30,13 +35,10 @@ export class Monster {
         };
 
         // ── Fase sistem ───────────────────────────────────────
-        // phases: array of { hpThreshold, attackPattern, announcement }
-        // hpThreshold: persentase HP untuk masuk fase ini (0-100)
-        this.phases       = data.phases || null;
-        this.currentPhase = 0;
-        this._phaseTriggered = {};  // track fase yang sudah ditrigger
+        this.phases          = data.phases || null;
+        this.currentPhase    = 0;
+        this._phaseTriggered = {};
 
-        // Pattern fase 1 (default)
         this.attackPattern = data.attackPattern || [
             { type: 'attack', damage: 8, damageType: DMG_TYPE.PHYSICAL, intent: 'attack' }
         ];
@@ -51,11 +53,6 @@ export class Monster {
 
     // ── Fase Detection ────────────────────────────────────────
 
-    /**
-     * Cek apakah ada transisi fase baru.
-     * Dipanggil setiap kali HP berubah.
-     * Return { triggered: bool, phase: object } kalau ada fase baru.
-     */
     checkPhaseTransition() {
         if (!this.phases || this.phases.length === 0) return null;
 
@@ -67,10 +64,14 @@ export class Monster {
                 this._phaseTriggered[i] = true;
                 this.currentPhase       = i + 1;
 
-                // Ganti attack pattern ke fase baru
                 if (phase.attackPattern) {
                     this.attackPattern = phase.attackPattern;
                     this.patternIndex  = 0;
+                }
+
+                // Fase baru bisa ganti elemen juga (untuk boss)
+                if (phase.element) {
+                    this.element = phase.element;
                 }
 
                 return { triggered: true, phase, phaseIndex: i + 1 };
@@ -98,7 +99,7 @@ export class Monster {
             return { type: 'stunned', intent: 'stunned' };
         }
 
-        const action = this.currentIntent;
+        const action      = this.currentIntent;
         this.patternIndex = (this.patternIndex + 1) % this.attackPattern.length;
         this._tickStatusEffects();
         return action;
@@ -114,6 +115,7 @@ export class Monster {
         } else if (type === DMG_TYPE.MAGIC) {
             actual = Math.max(0, amount - this.stats[STAT.MDEF]);
         }
+        // DMG_TYPE.TRUE → tidak dikurangi DEF/MDEF, langsung kena
 
         if (this.block > 0) {
             const blocked = Math.min(this.block, actual);
@@ -161,8 +163,6 @@ export class Monster {
                     this.hp = Math.max(0, this.hp - effect.value);
                     break;
                 case 'stun':
-                    this.isStunned = true;
-                    break;
                 case 'freeze':
                     this.isStunned = true;
                     break;
