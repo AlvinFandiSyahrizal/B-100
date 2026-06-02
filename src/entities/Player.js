@@ -1,5 +1,6 @@
 // ============================================================
 // Player.js — class karakter utama yang dikendalikan player
+// Update Phase 3: tambah pet, companions, ownedPets
 // ============================================================
 
 import {
@@ -12,7 +13,6 @@ export class Player {
         this.name       = name;
         this.curseLevel = curseLevel;
 
-        // Stat Primer — pakai string key langsung (bukan STAT constant)
         this.baseStats = {
             str: 10,
             int: 8,
@@ -46,6 +46,11 @@ export class Player {
 
         this.statusEffects = [];
         this.block         = 0;
+
+        // ── Phase 3: Companion, Pet, Owned collection ─────────
+        this.companions = [];       // array { id, mode } — maks 2 slot
+        this.pet        = null;     // string id pet aktif, atau null
+        this.ownedPets  = [];       // array id pet yang dimiliki player
     }
 
     // ── Stat Calculation ──────────────────────────────────────
@@ -206,7 +211,7 @@ export class Player {
 
     // ── Deck Management ───────────────────────────────────────
 
-    addCardToDeck(card)     { this.deck.push(card); }
+    addCardToDeck(card) { this.deck.push(card); }
 
     removeCardFromDeck(id) {
         const idx = this.deck.findIndex(c => c.id === id);
@@ -241,13 +246,17 @@ export class Player {
             hand:          [],
             statusEffects: this.statusEffects,
             block:         this.block,
+            // ── Phase 3 ───────────────────────────────────────
+            companions:    this.companions  || [],
+            pet:           this.pet         || null,
+            ownedPets:     this.ownedPets   || [],
         };
     }
 
     static fromJSON(data) {
         const p = new Player({ name: data.name, curseLevel: data.curseLevel });
         Object.assign(p.baseStats, data.baseStats);
-        p.equipment     = data.equipment || {};
+        p.equipment     = data.equipment     || {};
         p.stats         = p._calculateStats();
         p.hp            = Number(data.hp)    || p.stats['hp_max'];
         p.mp            = Number(data.mp)    || p.stats['mp_max'];
@@ -259,6 +268,10 @@ export class Player {
         p.hand          = data.hand          || [];
         p.statusEffects = data.statusEffects || [];
         p.block         = Number(data.block) || 0;
+        // ── Phase 3 ───────────────────────────────────────────
+        p.companions    = data.companions    || [];
+        p.pet           = data.pet           || null;
+        p.ownedPets     = data.ownedPets     || [];
         return p;
     }
 }
