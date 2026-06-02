@@ -8,6 +8,7 @@ import { ElementSystem }   from './ElementSystem.js';
 import {
     ENERGY_PER_TURN, HAND_SIZE, STAT, DMG_TYPE
 } from '../config/constants.js';
+import { Pet } from '../entities/Pet.js';
 
 export const COMBAT_STATE = {
     PLAYER_TURN: 'player_turn',
@@ -18,14 +19,15 @@ export const COMBAT_STATE = {
 
 export class CombatSystem {
 
-    constructor(player, monsters, companions = []) {
+    constructor(player, monsters, companions = [], pet = null) {
         this.player     = player;
         this.monsters   = monsters;
         this.companions = companions.filter(Boolean);
+        this.pet        = pet || null;   // ← BARU
         this.state      = COMBAT_STATE.PLAYER_TURN;
         this.turn       = 1;
         this.log        = [];
-
+    
         const highestEnemyAgi = Math.max(...monsters.map(m => m.stats[STAT.AGI] || 0));
         if (highestEnemyAgi > (this.player.stats[STAT.AGI] || 0)) {
             this.state = COMBAT_STATE.ENEMY_TURN;
@@ -37,7 +39,24 @@ export class CombatSystem {
     start() {
         DeckSystem.shuffle(this.player.deck);
         this._resetAllTempBuffs();
-
+    
+        // Apply pet passives ← BARU
+        if (this.pet) {
+            const petEvents = this.pet.applyPassives(this.player, {
+                floor:   this._floor   || 1,
+                zone:    this._zone    || 1,
+                isBoss:  this._isBoss  || false,
+                isElite: this._isElite || false,
+            });
+            // Simpan untuk ditampilkan ke UI kalau perlu
+            this._petEvents = petEvents;
+        }
+    
+        // Apply status_start dari pet ke monster ← BARU
+        if (this.player._petStatusStart?.length > 0) {
+            this._applyPetStatusStart();
+        }
+    
         if (this.state === COMBAT_STATE.PLAYER_TURN) {
             this._startPlayerTurn();
         } else {
@@ -49,6 +68,24 @@ export class CombatSystem {
         }
     }
 
+    _applyPetStatusStart() {
+        const statuses = this.player._petStatusStart || [];
+        const alive    = this.monsters.filter(m => !m.isDead);
+        if (alive.length === 0) return;
+    
+        for (const statusDef of statuses) {
+            if (statusDef.targetRandom) {
+                // Hanya 1 musuh acak
+                const target = alive[Math.floor(Math.random() * alive.length)];
+                target.addStatus(statusDef.type, statusDef.value, statusDef.duration);
+            } else {
+                // Semua musuh
+                for (const m of alive) {
+                    m.addStatus(statusDef.type, statusDef.value, statusDef.duration);
+                }
+            }
+        }
+    }
     getEffectiveCost(card) {
         if (this.player._nextCardFree) return 0;
         const reduction = this.player._curseReduction || 0;
@@ -109,30 +146,37 @@ export class CombatSystem {
     _startPlayerTurn() {
         this.state         = COMBAT_STATE.PLAYER_TURN;
         this.player.energy = ENERGY_PER_TURN;
-        this.player.block  = this.player._blockPersist ? this.player.block : 0;
-
+        this.player.block  = this.player._blockPersist || this.player._petBlockPersist
+            ? this.player.block
+            : 0;
+    
         if (this.player._nextTurnEnergy) {
             this.player.energy += this.player._nextTurnEnergy;
             this.player._nextTurnEnergy = 0;
         }
-
+    
         this._tickPlayerStatus();
         if (this.player.isDead) {
             this.state = COMBAT_STATE.LOSE;
             return;
         }
-
+    
+        // Pet regen ← BARU
+        if (this.player._petRegen > 0) {
+            this.player.heal(this.player._petRegen);
+        }
+    
         this.player._taikoCount  = 0;
         this.player._echoActive  = false;
         this.player._focusActive = 0;
-
+    
         const curseCost = this.player.statusEffects?.find(s => s.type === 'curse_cost');
         this.player._curseReduction = curseCost ? curseCost.value : 0;
-
+    
         const extraDraw = (this.player._nextTurnDraw || 0) + (this.player._extraDraw || 0);
         this.player._nextTurnDraw = 0;
         DeckSystem.draw(this.player, HAND_SIZE + extraDraw);
-
+    
         this._addLog(`── Giliran ${this.turn} (Player) ── Energi: ${this.player.energy}`);
     }
 
@@ -394,6 +438,30 @@ export class CombatSystem {
 
                 if (this.player._stance === 'attack') dmg = Math.floor(dmg * 1.3);
 
+                // Pet damage bonus
+                let petDmgMult = 1.0;
+                // +X% semua damage
+                if (this.player._petDamageBonus?.all) {
+                    petDmgMult += this.player._petDamageBonus.all / 100;
+                }
+                // +X% damage tipe spesifik (physical/magic)
+                if (card.damageType && this.player._petDamageBonus?.[card.damageType]) {
+                    petDmgMult += this.player._petDamageBonus[card.damageType] / 100;
+                }
+                // +X% saat HP rendah (harimau putih)
+                if (this.player._petLowHpDamageBonus) {
+                    const hpPct = this.player.hp / (this.player.stats['hp_max'] || 100);
+                    if (hpPct < 0.30) {
+                        petDmgMult += this.player._petLowHpDamageBonus / 100;
+                    }
+                }
+                // +X damage Raijin saat target Wet (ubur-ubur biru)
+                if (this.player._petWetRaijinBonus && t.hasStatus('wet')) {
+                    const atkElem = card.element || this.player.equipment?.weapon?.element;
+                    if (atkElem === 'raijin') dmg += this.player._petWetRaijinBonus;
+                }
+                dmg = Math.floor(dmg * petDmgMult);
+
                 // ── Gogyō Element Multiplier ──────────────────
                 let elementMultiplier = 1.0;
                 let elementReaction   = 'neutral';
@@ -536,6 +604,15 @@ export class CombatSystem {
 
             const actual = this.player.takeDamage(dmg, action.damageType || 'physical');
             this.player._lastDamageTaken = actual;
+            if (this.player.isDead && this.player._petFeniks) {
+                // Revive sekali per run
+                this.player._petFeniks = false;
+                this.player.hp = Math.ceil((this.player.stats['hp_max'] || 100) * 0.30);
+                events.push({ type: 'pet_revive', petId: 'feniks_kecil' });
+                this._addLog('Feniks! Player bangkit kembali dengan 30% HP!');
+                // Jangan set LOSE
+                return events;
+            }
             events.push({ type: 'damage', target: 'player', amount: actual, source: monster.id });
         }
 
@@ -583,9 +660,9 @@ export class CombatSystem {
     _resetAllTempBuffs() {
         this.player.statusEffects = (this.player.statusEffects || []).filter(s =>
             !['curse_burn', 'curse_cost', 'extra_draw', 'damage_bonus',
-              'dodge', 'fortify', 'taiko', 'focus', 'echo'].includes(s.type)
+            'dodge', 'fortify', 'taiko', 'focus', 'echo'].includes(s.type)
         );
-
+    
         this.player._curseReduction  = 0;
         this.player._damageBonus     = 0;
         this.player._nextCardFree    = false;
@@ -602,10 +679,13 @@ export class CombatSystem {
         this.player._lastDamageTaken = 0;
         this.player.block            = 0;
         this.player.hand             = [];
-
+    
         for (const c of this.companions) {
             if (c) c._turnCount = 0;
         }
+    
+        // Reset pet flags ← BARU
+        Pet.resetPetFlags(this.player);
     }
 
     // ── Helpers ───────────────────────────────────────────────
