@@ -12,6 +12,8 @@ import {
 import { SaveSystem } from '../storage/SaveSystem.js';
 import { GameGuard } from '../utils/GameGuard.js';
 import { Player } from '../entities/Player.js';
+import { DeckSystem }   from '../systems/DeckSystem.js';
+import { STARTER_DECK } from '../data/cards/index.js';
 
 const CURSE_INFO = [
     null,
@@ -942,16 +944,12 @@ export class CharacterSelectScene extends Phaser.Scene {
             delay: 250,
         });
 
-    this.time.delayedCall(
-        1500,
-        () => {
-            this._startingRun = false;
-
-            const player =
-                new Player({
+        this.time.delayedCall(1500, () => {
+                this._startingRun = false;
+        
+                const player = new Player({
                     name,
-                    curseLevel:
-                        this.curseLevel,
+                    curseLevel: this.curseLevel,
                 });
 
             console.log(
@@ -959,26 +957,15 @@ export class CharacterSelectScene extends Phaser.Scene {
                 player
             );
 
-            this.scene.start(
-                SCENE.NODE_MAP,
-                {
-                    zone: 1,
-                    floor: 1,
-
-                    curseLevel:
-                        this.curseLevel,
-
-                    playerName:
-                        name,
-
-                    playerData:
-                        player.toJSON(),
-
-                    mapData:
-                        null,
-                    }
-                );
-            }
-        );
+        this.scene.start(SCENE.NODE_MAP, {
+            zone:       1,
+            floor:      1,
+            curseLevel: this.curseLevel,
+            playerName: name,
+            playerData: player.toJSON(), 
+            mapData:    null,
+        });
+    });
+       
     }
 }

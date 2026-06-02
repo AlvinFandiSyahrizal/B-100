@@ -237,6 +237,7 @@ export class Player {
             baseStats:     this.baseStats,
             hp:            this.hp,
             mp:            this.mp,
+            maxHp:         this.stats['hp_max'],
             level:         this.level,
             exp:           this.exp,
             gold:          this.gold,
@@ -246,7 +247,6 @@ export class Player {
             hand:          [],
             statusEffects: this.statusEffects,
             block:         this.block,
-            // ── Phase 3 ───────────────────────────────────────
             companions:    this.companions  || [],
             pet:           this.pet         || null,
             ownedPets:     this.ownedPets   || [],
