@@ -120,7 +120,7 @@ export class SaveSystem {
         console.log('[SaveSystem] Run dihapus.');
     }
 
-    // ── Meta Progression ──────────────────────────────────────
+    //  Meta Progression 
 
     /** Simpan data meta (permanen antar run). */
     static saveMeta(metaData) {
@@ -152,22 +152,38 @@ export class SaveSystem {
 
     static _defaultMeta() {
         return {
-            totalRuns:         0,
-            bestFloor:         0,
-            totalKills:        0,
-            unlockedCompanions: [],
-            defeatedBosses:    [],
-            bestiary:          {},  // monster yang pernah dikalahkan
+            totalRuns:            0,
+            bestFloor:            0,
+            totalKills:           0,
+            totalBossKills:       0,
+            totalMiniBossKills:   0,
+            unlockedCompanions:   [],
+            defeatedBosses:       [],
+            bestiary:             {},
+            ownedRelics:          [],
+ 
+            //  Magatama currency 
+            magatama:             0,    
+            totalMagatamaEarned:  0,    
+            totalMagatamaSpent:   0,   
+ 
+            //  Gacha collection 
+            ownedCompanions:      [],   
+            ownedPets:            [],   
+            ownedWeapons:         [],   
+ 
+            //  Pity counter 
+            pityCompanion:        0,   
+            pityPet:              0,    
+            pityWeapon:           0,  
         };
     }
-
     /** Update satu field meta setelah run selesai. */
     static updateMeta(updates) {
         const meta = this.loadMeta();
         Object.assign(meta, updates);
         this.saveMeta(meta);
     }
-
     /** Rekam hasil run ke meta. */
     static recordRun({ floor, kills, won }) {
         const meta = this.loadMeta();
@@ -176,7 +192,6 @@ export class SaveSystem {
         if (floor > meta.bestFloor) meta.bestFloor = floor;
         this.saveMeta(meta);
     }
-
     /** Tambah monster ke bestiary. */
     static addToBestiary(monsterId) {
         const meta = this.loadMeta();

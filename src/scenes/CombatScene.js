@@ -22,6 +22,7 @@ import { DamageNumber }                   from '../ui/DamageNumber.js';
 import { PaperDollDisplay }               from '../ui/PaperDollDisplay.js';
 import { Pet }                            from '../entities/Pet.js';
 import { getPet }                         from '../data/pets/index.js';
+import { MagatamaSystem }                 from '../systems/MagatamaSystem.js';
 
 export class CombatScene extends Phaser.Scene {
     constructor() {
@@ -949,13 +950,26 @@ export class CombatScene extends Phaser.Scene {
     _handleCombatEnd() {
         this.input.enabled = false;
         this._hideTooltip();
-
+ 
         if (this.combat.playerWon) {
+            // Earn Magatama dari combat ini
+            const magResult = MagatamaSystem.earnFromCombat({
+                isBoss:       this.isBoss,
+                isElite:      this.isElite,
+                isMini:       this.isMini,
+                monsterCount: this.monsters.length,
+                floor:        this.floor,
+                curseLevel:   this.curseLevel,
+            });
+ 
+            // Tampilkan notif Magatama
+            this._showMagatamaEarn(magResult.amount);
+ 
             this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, '✦ MENANG ✦', {
                 fontFamily: 'monospace', fontSize: '36px', color: '#ffcc44',
             }).setOrigin(0.5).setDepth(10);
-
-            this.time.delayedCall(1200, () => {
+ 
+            this.time.delayedCall(1400, () => {
                 if (this.mapData) {
                     const loot = LootSystem.generate({
                         floor:      this.floor,
@@ -971,10 +985,11 @@ export class CombatScene extends Phaser.Scene {
                         ],
                     });
                     this.scene.start(SCENE.REWARD, {
-                        zone: this.zone, floor: this.floor,
-                        curseLevel: this.curseLevel,
-                        playerData: this.player.toJSON(),
-                        mapData: this.mapData,
+                        zone:          this.zone,
+                        floor:         this.floor,
+                        curseLevel:    this.curseLevel,
+                        playerData:    this.player.toJSON(),
+                        mapData:       this.mapData,
                         currentNodeId: this.currentNodeId,
                         loot,
                     });
@@ -982,24 +997,56 @@ export class CombatScene extends Phaser.Scene {
                     this.scene.start(SCENE.MAIN_MENU);
                 }
             });
-
+ 
         } else {
             if (this.paperDoll) this.paperDoll.playDeathAnim();
-
+ 
             this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, '✦ GAME OVER ✦', {
                 fontFamily: 'monospace', fontSize: '36px', color: '#cc3333',
             }).setOrigin(0.5).setDepth(10);
-
+ 
             this.time.delayedCall(1500, () => {
-                this.scene.start(SCENE.GAME_OVER, { 
-                    floor: this.floor,
-                    zone:        this.zone,
-                    curseLevel:  this.curseLevel,
-                    playerData:  this.player.toJSON(),
-                    // kills, defeatedBoss, dll kalau sudah ada tracking-nya
+                this.scene.start(SCENE.GAME_OVER, {
+                    floor:            this.floor,
+                    zone:             this.zone,
+                    curseLevel:       this.curseLevel,
+                    playerData:       this.player.toJSON(),
+                    defeatedBoss:     this.isBoss,
+                    defeatedMiniBoss: this.isMini,
                 });
             });
         }
+    }
+    
+    _showMagatamaEarn(amount) {
+        if (!amount || amount <= 0) return;
+ 
+        const px = GAME_WIDTH / 2;
+        const py = GAME_HEIGHT / 2 - 80;
+ 
+        const txt = this.add.text(px, py, `+${amount} 🪬`, {
+            fontFamily: 'monospace', fontSize: '18px',
+            color: '#aa66cc', fontStyle: 'bold',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5).setDepth(11).setAlpha(0);
+ 
+        this.tweens.add({
+            targets:  txt,
+            alpha:    { from: 0, to: 1 },
+            y:        py - 20,
+            duration: 400,
+            ease:     'Back.Out',
+            onComplete: () => {
+                this.time.delayedCall(800, () => {
+                    this.tweens.add({
+                        targets:  txt,
+                        alpha:    0,
+                        duration: 300,
+                        onComplete: () => txt.destroy(),
+                    });
+                });
+            },
+        });
     }
 }
 // ── Helpers ───────────────────────────────────────────────────
