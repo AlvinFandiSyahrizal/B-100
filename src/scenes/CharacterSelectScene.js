@@ -103,9 +103,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     ).setOrigin(0.5).setAlpha(0.18);
 
     const grid = this.add.graphics();
-
     grid.lineStyle(1, 0x141a28, 0.35);
-
     for (let y = 0; y < GAME_HEIGHT; y += 42) {
         grid.moveTo(0, y);
         grid.lineTo(GAME_WIDTH, y);
@@ -119,7 +117,6 @@ export class CharacterSelectScene extends Phaser.Scene {
     grid.strokePath();
 
     const glow = this.add.graphics();
-
     glow.fillStyle(0x2b1530, 0.18);
     glow.fillCircle(
         GAME_WIDTH / 2,
@@ -128,108 +125,37 @@ export class CharacterSelectScene extends Phaser.Scene {
     );
 
     glow.fillStyle(0x8b3e1d, 0.08);
-    glow.fillCircle(
-        GAME_WIDTH / 2,
-        160,
-        140
-    );
+    glow.fillCircle( GAME_WIDTH / 2, 160, 140 );
 
-    const fog1 = this.add.rectangle(
-        GAME_WIDTH / 2,
-        GAME_HEIGHT - 35,
-        GAME_WIDTH,
-        90,
-        0x241633,
-        0.18
-    );
-
-    const fog2 = this.add.rectangle(
-        GAME_WIDTH / 2,
-        GAME_HEIGHT - 20,
-        GAME_WIDTH,
-        70,
-        0x111827,
-        0.15
-    );
-
-    this.tweens.add({
-        targets: fog1,
-        alpha: 0.28,
-        duration: 2500,
-        yoyo: true,
-        repeat: -1,
-    });
-
-    this.tweens.add({
-        targets: fog2,
-        alpha: 0.24,
-        duration: 3200,
-        yoyo: true,
-        repeat: -1,
-    });
-
+    const fog1 = this.add.rectangle( GAME_WIDTH / 2, GAME_HEIGHT - 35, GAME_WIDTH, 90, 0x241633, 0.18 );
+    const fog2 = this.add.rectangle( GAME_WIDTH / 2, GAME_HEIGHT - 20, GAME_WIDTH, 70, 0x111827, 0.15 );
+    this.tweens.add({ targets: fog1, alpha: 0.28, duration: 2500, yoyo: true, repeat: -1, });
+    this.tweens.add({ targets: fog2, alpha: 0.24, duration: 3200, yoyo: true, repeat: -1, });
 
     for (let i = 0; i < 7; i++) {
-        const x =
-            Phaser.Math.Between(
-                280,
-                GAME_WIDTH - 280
-            );
-
-        const y =
-            Phaser.Math.Between(
-                120,
-                GAME_HEIGHT - 180
-            );
-
-        const orb =
-            this.add.circle(
-                x,
-                y,
+        const x = Phaser.Math.Between( 280, GAME_WIDTH - 280 );
+        const y = Phaser.Math.Between( 120, GAME_HEIGHT - 180 );
+        const orb = this.add.circle( x, y,
                 Phaser.Math.Between(2, 4),
-                Phaser.Utils.Array.GetRandom([
-                    0x8b5cf6,
-                    0x60a5fa,
-                    0xf59e0b,
+                Phaser.Utils.Array.GetRandom([ 0x8b5cf6, 0x60a5fa, 0xf59e0b,
                 ]),
                 0.22
             );
 
-        this.tweens.add({
-            targets: orb,
+        this.tweens.add({ targets: orb,
+            y: y - Phaser.Math.Between( 10, 30 ),
+            alpha: { from: 0.25, to: 0, },
 
-            y: y - Phaser.Math.Between(
-                10,
-                30
-            ),
-
-            alpha: {
-                from: 0.25,
-                to: 0,
-            },
-
-            duration:
-                Phaser.Math.Between(
-                    2500,
-                    4500
-                ),
+            duration: Phaser.Math.Between( 2500, 4500 ),
 
             repeat: -1,
 
-            delay:
-                Phaser.Math.Between(
-                    0,
-                    2500
+            delay: Phaser.Math.Between( 0, 2500
                 ),
         });
     }
 
-        this.tweens.add({
-            targets: glow,
-            alpha: 0.75,
-            duration: 2800,
-            yoyo: true,
-            repeat: -1,
+        this.tweens.add({ targets: glow, alpha: 0.75, duration: 2800, yoyo: true, repeat: -1,
         });
     }
 
@@ -254,10 +180,7 @@ export class CharacterSelectScene extends Phaser.Scene {
             }
         ).setOrigin(0.5);
 
-        const title =
-            this.add.text(
-                GAME_WIDTH / 2,
-                108,
+        const title = this.add.text( GAME_WIDTH / 2, 108,
                 'Gerbang Yokai',
                 {
                     fontFamily: 'monospace',
@@ -298,22 +221,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
 
     _buildNameInput() {
-        const glow = this.add.rectangle(
-            GAME_WIDTH / 2,
-            225,
-            372,
-            58,
-            0xf5b34d,
-            0
-        );
+        const glow = this.add.rectangle( GAME_WIDTH / 2, 225, 372, 58, 0xf5b34d, 0 );
 
-        const box = this.add.rectangle(
-            GAME_WIDTH / 2,
-            225,
-            360,
-            48,
-            0x0f1322
-        )
+        const box = this.add.rectangle( GAME_WIDTH / 2, 225, 360, 48, 0x0f1322 )
             .setStrokeStyle(2, 0x293244)
             .setInteractive({
                 useHandCursor: true
@@ -343,15 +253,12 @@ export class CharacterSelectScene extends Phaser.Scene {
 
         box.on('pointerdown', () => {
             this.nameEditing = true;
-
             if (!this.playerName) {
                 this.nameTxt.setText('');
             }
 
             box.setStrokeStyle(2, 0xf5b34d);
-
             glow.setAlpha(0.10);
-
             this.tweens.add({
                 targets: glow,
                 alpha: 0.18,
@@ -378,7 +285,6 @@ export class CharacterSelectScene extends Phaser.Scene {
                 );
 
                 this.cursor.setText('');
-
                 if (!this.playerName) {
                     this.nameTxt
                         .setText(this.placeholder)
@@ -432,47 +338,23 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
 
     _buildCurseLevelSelector() {
-    const y = 320;
-
-    this.curseCards = [];
-
-    const startX =
-        GAME_WIDTH / 2 - 220;
-
+    const y = 320; this.curseCards = [];
+    const startX = GAME_WIDTH / 2 - 220;
     for (
         let level = 1;
         level <= MAX_CURSE_LEVEL;
         level++
     ) {
-        const info =
-            CURSE_INFO[level];
-
-        const x =
-            startX +
-            (level - 1) * 110;
-
-        const glow =
-            this.add.rectangle(
-                x,
-                y,
-                88,
-                76,
-                Phaser.Display
-                    .Color
+        const info = CURSE_INFO[level];
+        const x = startX + (level - 1) * 110;
+        const glow = this.add.rectangle( x, y, 88, 76, Phaser.Display .Color
                     .HexStringToColor(
                         info.color
                     ).color,
                 0
             );
 
-        const card =
-            this.add.rectangle(
-                x,
-                y,
-                84,
-                72,
-                0x111827
-            )
+        const card = this.add.rectangle( x, y, 84, 72, 0x111827 )
             .setStrokeStyle(
                 2,
                 0x293244
@@ -481,9 +363,7 @@ export class CharacterSelectScene extends Phaser.Scene {
                 useHandCursor: true
             });
 
-        const roman =
-            ['I','II','III','IV','V'][level - 1];
-
+        const roman = ['I','II','III','IV','V'][level - 1];
         const levelTxt =
             this.add.text(
                 x,
@@ -563,14 +443,7 @@ export class CharacterSelectScene extends Phaser.Scene {
             }
         );
 
-        this.curseCards.push({
-            level,
-            glow,
-            card,
-            levelTxt,
-            nameTxt,
-            statTxt,
-        });
+        this.curseCards.push({ level, glow, card, levelTxt, nameTxt, statTxt, });
     }
 
     this._updateCurseDisplay();
@@ -627,34 +500,15 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
 
     _buildStartButton() {
-        const glow =
-            this.add.rectangle(
-                GAME_WIDTH / 2,
-                GAME_HEIGHT - 110,
-                320,
-                66,
-                0xf08c42,
-                0.08
-            );
-
-        const bg =
-            this.add.rectangle(
-                GAME_WIDTH / 2,
-                GAME_HEIGHT - 110,
-                300,
-                56,
-                0x2c120a
-            )
+        const glow = this.add.rectangle( GAME_WIDTH / 2, GAME_HEIGHT - 110, 320, 66, 0xf08c42, 0.08 );
+        const bg = this.add.rectangle( GAME_WIDTH / 2, GAME_HEIGHT - 110, 300, 56, 0x2c120a )
             .setStrokeStyle(
                 2,
                 0xf08c42
             )
             .setInteractive();
 
-        const txt =
-            this.add.text(
-                GAME_WIDTH / 2,
-                GAME_HEIGHT - 110,
+        const txt = this.add.text( GAME_WIDTH / 2, GAME_HEIGHT - 110,
                 '⚔ Masuki Dungeon',
                 {
                     fontSize: '18px',
@@ -725,11 +579,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
 
     _updateCurseDisplay() {
-        const info =
-            CURSE_INFO[
-                this.curseLevel
-            ];
-
+        const info = CURSE_INFO[ this.curseLevel ];
         this.curseCards.forEach(
             (item) => {
                 const active =
@@ -787,26 +637,11 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
 
     _updateCurseInfo() {
-        const info =
-            CURSE_INFO[this.curseLevel];
-
-        const stat =
-            CURSE_STAT_MULTIPLIER[
-                this.curseLevel
-            ];
-
-        const reward =
-            CURSE_REWARD_MULTIPLIER[
-                this.curseLevel
-            ];
-
-        this.curseDescTxt.setText(
-            info.desc
-        );
-
-        this.curseFlavorTxt.setText(
-            info.flavor
-        );
+        const info = CURSE_INFO[this.curseLevel];
+        const stat = CURSE_STAT_MULTIPLIER[ this.curseLevel ];
+        const reward = CURSE_REWARD_MULTIPLIER[ this.curseLevel ];
+        this.curseDescTxt.setText( info.desc );
+        this.curseFlavorTxt.setText( info.flavor );
 
         this.curseStatTxt.setText(
             `Musuh ×${stat.toFixed(1)}   •   Reward ×${reward.toFixed(1)}`
@@ -851,8 +686,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
 
     _startRun() {
-        const name =
-            this.playerName.trim();
+        const name = this.playerName.trim();
         if (!name) {
             this._showNameWarning(
                 'Nama ronin belum diisi.'
@@ -864,14 +698,7 @@ export class CharacterSelectScene extends Phaser.Scene {
             return;
         }
 
-        const portal =
-            this.add.circle(
-                GAME_WIDTH / 2,
-                GAME_HEIGHT / 2,
-                20,
-                0xf59e0b,
-                0.08
-            )
+        const portal = this.add.circle( GAME_WIDTH / 2, GAME_HEIGHT / 2, 20, 0xf59e0b, 0.08 )
             .setDepth(998);
 
         this.tweens.add({
@@ -897,10 +724,7 @@ export class CharacterSelectScene extends Phaser.Scene {
             )
             .setDepth(999);
 
-        const floorTxt =
-            this.add.text(
-                GAME_WIDTH / 2,
-                GAME_HEIGHT / 2 - 18,
+        const floorTxt = this.add.text( GAME_WIDTH / 2, GAME_HEIGHT / 2 - 18,
                 'LANTAI 1',
                 {
                     fontFamily: 'monospace',
@@ -913,10 +737,7 @@ export class CharacterSelectScene extends Phaser.Scene {
             .setDepth(1000)
             .setAlpha(0);
 
-        const subTxt =
-            this.add.text(
-                GAME_WIDTH / 2,
-                GAME_HEIGHT / 2 + 20,
+        const subTxt = this.add.text( GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20,
                 'DUNGEON B100',
                 {
                     fontFamily: 'monospace',
@@ -947,10 +768,7 @@ export class CharacterSelectScene extends Phaser.Scene {
         this.time.delayedCall(1500, () => {
                 this._startingRun = false;
         
-                const player = new Player({
-                    name,
-                    curseLevel: this.curseLevel,
-                });
+                const player = new Player({ name, curseLevel: this.curseLevel, });
 
             console.log(
                 '[NEW RUN PLAYER]',

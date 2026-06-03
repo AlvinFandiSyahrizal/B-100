@@ -3,7 +3,6 @@
 // Fix step 10: companions deklarasi ganda, element reaction,
 //              closing brace _handleCombatEnd
 // ============================================================
-
 import {
     SCENE, GAME_WIDTH, GAME_HEIGHT,
     ENERGY_PER_TURN, STAT
@@ -66,7 +65,6 @@ export class CombatScene extends Phaser.Scene {
         this._pauseOpen      = false;
         this._pauseObjects   = [];
     }
-
     // ── create() — async karena _buildCompanions pakai dynamic import ──
     async create() {
         // Spawn monster
@@ -87,14 +85,11 @@ export class CombatScene extends Phaser.Scene {
                 this.monsters.push(new Monster(data, this.floor));
             }
         }
-
         // ── FIX: satu deklarasi companions, pakai await ──────────
         const companions = await this._buildCompanions();
-
         // ── Build pet instance ────────────────────────────────────
         const petData = this.player.pet ? getPet(this.player.pet) : null;
         const petInst = petData ? new Pet(petData) : null;
-
         // ── Init CombatSystem ────────────────────────────────────
         this.combat = new CombatSystem(this.player, this.monsters, companions, petInst);
         this.combat._floor   = this.floor;
@@ -102,7 +97,6 @@ export class CombatScene extends Phaser.Scene {
         this.combat._isBoss  = this.isBoss;
         this.combat._isElite = this.isElite;
         this.combat.start();
-
         // Build UI
         this._buildBackground();
         this._buildMonsterArea();
@@ -123,7 +117,6 @@ export class CombatScene extends Phaser.Scene {
         this._refreshUI();
         this._renderHand();
     }
-
     // ── Build Companions (async dynamic import) ───────────────
     async _buildCompanions() {
         const { Companion }    = await import('../entities/Companion.js');
@@ -138,7 +131,6 @@ export class CombatScene extends Phaser.Scene {
             })
             .filter(Boolean);
     }
-
     // ── Background ────────────────────────────────────────────
     _buildBackground() {
         this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x080810);
@@ -159,7 +151,6 @@ export class CombatScene extends Phaser.Scene {
             color: this.isBoss ? '#cc4433' : this.isElite ? '#cc8833' : '#333355',
         }).setOrigin(0.5, 0);
     }
-
     // ── Monster Area ──────────────────────────────────────────
     _buildMonsterArea() {
         this.monsterSprites      = [];
@@ -282,7 +273,6 @@ export class CombatScene extends Phaser.Scene {
             if (spr) this.nodePositions[i] = { x: spr.x, y: spr.y };
         });
     }
-
     // ── Player Area ───────────────────────────────────────────
     _buildPlayerArea() {
         const px = 155, py = GAME_HEIGHT - 210;
@@ -319,7 +309,6 @@ export class CombatScene extends Phaser.Scene {
         if (slot) this.paperDoll.updateSlot(slot);
         else      this.paperDoll.refresh();
     }
-
     // ── Queue Area ────────────────────────────────────────────
     _buildQueueArea() {
         this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 195, 'ANTRIAN AKSI', {
@@ -346,7 +335,6 @@ export class CombatScene extends Phaser.Scene {
             fontFamily: 'monospace', fontSize: '13px', color: '#cc8833',
         }).setOrigin(0.5);
     }
-
     // ── HUD ───────────────────────────────────────────────────
     _buildHUD() {
         this.deckText = this.add.text(GAME_WIDTH - 50, GAME_HEIGHT - 50, '', {
@@ -381,7 +369,6 @@ export class CombatScene extends Phaser.Scene {
         ];
         DeckViewerOverlay.show(this, allCards, { canPurge: false, canUpgrade: false });
     }
-
     // ── Action Buttons ────────────────────────────────────────
     _buildActionButtons() {
         const ax = GAME_WIDTH - 110, ay = GAME_HEIGHT - 135;
@@ -425,7 +412,6 @@ export class CombatScene extends Phaser.Scene {
         clearBg.on('pointerout',  () => clearTxt.setColor('#2a1a33'));
         clearBg.on('pointerdown', () => this._clearQueue());
     }
-
     // ── Tooltip ───────────────────────────────────────────────
     _buildTooltip() {
         this.tooltipBg = this.add.rectangle(0, 0, 230, 175, 0x080812)
@@ -485,7 +471,6 @@ export class CombatScene extends Phaser.Scene {
         this.tooltipBg.setVisible(false);
         this.tooltipLines.forEach(t => t.setVisible(false));
     }
-
     // ── Card Rendering ────────────────────────────────────────
     _renderHand() {
         if (this.cardObjects) {
@@ -594,7 +579,6 @@ export class CombatScene extends Phaser.Scene {
 
         return allObjs;
     }
-
     // ── Queue ─────────────────────────────────────────────────
     _addToQueue(card, handIndex) {
         const cost = this.combat.getEffectiveCost(card);
@@ -628,7 +612,6 @@ export class CombatScene extends Phaser.Scene {
         this.attackBg?.setStrokeStyle(1, hasQueue ? 0x882222 : 0x441111);
         this.attackTxt?.setColor(hasQueue ? '#cc4433' : '#331111');
     }
-
     // ── Actions ───────────────────────────────────────────────
     _doAttack() {
         if (this.selectedQueue.length === 0) return;
@@ -661,7 +644,6 @@ export class CombatScene extends Phaser.Scene {
 
         if (this.combat.isOver) this._handleCombatEnd();
     }
-
     // ── FIX: case damage — element reaction tidak unreachable ─
     _handleCombatEvents(events) {
         if (!events || events.length === 0) return;
@@ -813,7 +795,6 @@ export class CombatScene extends Phaser.Scene {
         this._renderHand();
         if (this.combat.isOver) this._handleCombatEnd();
     }
-
     // ── UI Refresh ────────────────────────────────────────────
     _refreshUI() {
         const p = this.player;
@@ -873,7 +854,6 @@ export class CombatScene extends Phaser.Scene {
             }
         });
     }
-
     // ── Menu Button & Pause Menu ──────────────────────────────
     _buildMenuButton() {
         const bg = this.add.rectangle(GAME_WIDTH - 50, 28, 70, 26, 0x0d0d1a)
@@ -965,7 +945,6 @@ export class CombatScene extends Phaser.Scene {
         this._pauseObjects = [];
         if (!this.combat?.isOver) this.input.enabled = true;
     }
-
     // ── FIX: _handleCombatEnd — closing brace benar ───────────
     _handleCombatEnd() {
         this.input.enabled = false;
@@ -1012,12 +991,17 @@ export class CombatScene extends Phaser.Scene {
             }).setOrigin(0.5).setDepth(10);
 
             this.time.delayedCall(1500, () => {
-                this.scene.start(SCENE.GAME_OVER, { floor: this.floor });
+                this.scene.start(SCENE.GAME_OVER, { 
+                    floor: this.floor,
+                    zone:        this.zone,
+                    curseLevel:  this.curseLevel,
+                    playerData:  this.player.toJSON(),
+                    // kills, defeatedBoss, dll kalau sudah ada tracking-nya
+                });
             });
         }
     }
 }
-
 // ── Helpers ───────────────────────────────────────────────────
 function _statusIcon(type) {
     const icons = {
