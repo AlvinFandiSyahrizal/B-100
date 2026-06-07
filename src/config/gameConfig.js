@@ -1,9 +1,8 @@
 // ============================================================
 // gameConfig.js — konfigurasi Phaser engine
+// Update Phase 4: tambah GashaponScene
 // ============================================================
-
-import { GAME_WIDTH, GAME_HEIGHT, SCENE } from './constants.js';
-
+import { GAME_WIDTH, GAME_HEIGHT } from './constants.js';
 import { BootScene }            from '../scenes/BootScene.js';
 import { PreloadScene }         from '../scenes/PreloadScene.js';
 import { MainMenuScene }        from '../scenes/MainMenuScene.js';
@@ -18,31 +17,22 @@ import { VictoryScene }         from '../scenes/VictoryScene.js';
 import { EventScene }           from '../scenes/EventScene.js';
 import { ShrineScene }          from '../scenes/ShrineScene.js';
 import { CharacterSelectScene } from '../scenes/CharacterSelectScene.js';
-
-// Nanti scene lain ditambahkan di sini sesuai phase
+import { GashaponScene }        from '../scenes/GashaponScene.js';  
 
 export const gameConfig = {
-    type: Phaser.AUTO,           // AUTO = pakai WebGL kalau bisa, fallback Canvas
-    width:  GAME_WIDTH,
-    height: GAME_HEIGHT,
-    parent: 'game-container',   // div di index.html
+    type:            Phaser.AUTO,
+    width:           GAME_WIDTH,
+    height:          GAME_HEIGHT,
+    parent:          'game-container',
     backgroundColor: '#0a0a0f',
-
-    // Scale agar game muat di berbagai ukuran layar
     scale: {
-        mode: Phaser.Scale.FIT,
+        mode:       Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
     },
-
-    // Physics tidak dipakai untuk game turn-based,
-    // tapi tetap ada untuk kemungkinan efek animasi
     physics: {
         default: 'arcade',
-        arcade: {
-            debug: false,
-        },
+        arcade:  { debug: false },
     },
-
     scene: [
         BootScene,
         PreloadScene,
@@ -58,5 +48,6 @@ export const gameConfig = {
         EventScene,
         ShrineScene,
         CharacterSelectScene,
+        GashaponScene,         
     ],
 };

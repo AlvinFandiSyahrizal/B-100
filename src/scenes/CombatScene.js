@@ -668,6 +668,17 @@ export class CombatScene extends Phaser.Scene {
                     }
                     break;
                 }
+                case 'player_stunned': {
+                    const px = this._getPlayerPos();
+                    // Tampilkan teks STUN di atas player
+                    DamageNumber.showStatus?.(this, px.x, px.y - 50, 'stun', 0);
+                    // Refresh UI karena turn langsung ke musuh
+                    this.time.delayedCall(100, () => {
+                        this._refreshUI();
+                        this._renderHand();
+                    });
+                    break;
+                }
 
                 case 'heal': {
                     const px = this._getPlayerPos();

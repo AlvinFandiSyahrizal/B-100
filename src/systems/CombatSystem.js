@@ -33,13 +33,10 @@ export class CombatSystem {
             this.state = COMBAT_STATE.ENEMY_TURN;
         }
     }
-
     // ── Public API ────────────────────────────────────────────
-
     start() {
         DeckSystem.shuffle(this.player.deck);
         this._resetAllTempBuffs();
-    
         // Apply pet passives ← BARU
         if (this.pet) {
             const petEvents = this.pet.applyPassives(this.player, {
@@ -51,7 +48,6 @@ export class CombatSystem {
             // Simpan untuk ditampilkan ke UI kalau perlu
             this._petEvents = petEvents;
         }
-    
         // Apply status_start dari pet ke monster ← BARU
         if (this.player._petStatusStart?.length > 0) {
             this._applyPetStatusStart();
@@ -131,7 +127,7 @@ export class CombatSystem {
 
     endPlayerTurn() {
         if (this.state !== COMBAT_STATE.PLAYER_TURN) return [];
-
+ 
         DeckSystem.discardHand(this.player);
         this.turn++;
         this._startEnemyTurn();
@@ -140,66 +136,79 @@ export class CombatSystem {
 
     get isOver()    { return this.state === COMBAT_STATE.WIN || this.state === COMBAT_STATE.LOSE; }
     get playerWon() { return this.state === COMBAT_STATE.WIN; }
-
     // ── Player Turn ───────────────────────────────────────────
-
     _startPlayerTurn() {
         this.state         = COMBAT_STATE.PLAYER_TURN;
         this.player.energy = ENERGY_PER_TURN;
         this.player.block  = this.player._blockPersist || this.player._petBlockPersist
             ? this.player.block
             : 0;
-    
+ 
         if (this.player._nextTurnEnergy) {
             this.player.energy += this.player._nextTurnEnergy;
             this.player._nextTurnEnergy = 0;
         }
-    
+        // Tick status dulu (burn/poison kena di sini)
         this._tickPlayerStatus();
         if (this.player.isDead) {
             this.state = COMBAT_STATE.LOSE;
             return;
         }
-    
-        // Pet regen ← BARU
+        // ── FIX: cek stun/freeze player ──────────────────────
+        // Kalau player kena stun atau freeze, skip turn ini
+        // Status sudah di-tick dan duration sudah berkurang di atas
+        const isStunned = this.player.statusEffects?.some(
+            s => (s.type === 'stun' || s.type === 'freeze') && s.duration >= 0
+        );
+ 
+        if (isStunned) {
+            // Skip turn — langsung ke enemy turn lagi
+            // Tapi tetap draw kartu supaya player bisa lihat tangan
+            // (tidak bisa dimainkan karena state bukan PLAYER_TURN)
+            this.state = COMBAT_STATE.ENEMY_TURN;
+            // Emit event untuk UI
+            this._addLog(`Player kena ${isStunned ? 'stun' : 'freeze'} — skip turn!`);
+            // Delay sedikit lalu proses enemy turn
+            // Di scene yang memanggil ini, events dari _processEnemyTurn
+            // akan di-handle seperti biasa
+            const skipEvents = [{ type: 'player_stunned' }];
+            const enemyEvts  = this._processEnemyTurn();
+            return; // return early, tidak draw kartu atau set PLAYER_TURN
+        }
+        // ── end fix ──────────────────────────────────────────
+        // Pet regen
         if (this.player._petRegen > 0) {
             this.player.heal(this.player._petRegen);
         }
-    
+ 
         this.player._taikoCount  = 0;
         this.player._echoActive  = false;
         this.player._focusActive = 0;
-    
+ 
         const curseCost = this.player.statusEffects?.find(s => s.type === 'curse_cost');
         this.player._curseReduction = curseCost ? curseCost.value : 0;
-    
+ 
         const extraDraw = (this.player._nextTurnDraw || 0) + (this.player._extraDraw || 0);
         this.player._nextTurnDraw = 0;
         DeckSystem.draw(this.player, HAND_SIZE + extraDraw);
-    
+ 
         this._addLog(`── Giliran ${this.turn} (Player) ── Energi: ${this.player.energy}`);
     }
-
     // ── Enemy Turn ────────────────────────────────────────────
-
     _startEnemyTurn() {
         this.state = COMBAT_STATE.ENEMY_TURN;
     }
 
     _processEnemyTurn() {
         const allEvents = [];
-
         // 1. Monster aksi
         for (const monster of this.monsters) {
             if (monster.isDead) continue;
-
             const action = monster.executeAction();
-
             if (monster.isDead) {
                 allEvents.push({ type: 'monster_died_status', monsterId: monster.id });
                 continue;
             }
-
             const events = this._resolveMonsterAction(monster, action);
             allEvents.push(...events);
 
@@ -208,35 +217,26 @@ export class CombatSystem {
                 break;
             }
         }
-
         if (this.state === COMBAT_STATE.LOSE) return allEvents;
-
         // 2. Companion aksi
         if (this.companions.length > 0 && !this._allMonstersDead()) {
             const companionEvents = this._processCompanionTurn();
             allEvents.push(...companionEvents);
         }
-
         // 3. Cek win / mulai player turn
         if (this._allMonstersDead()) {
             this.state = COMBAT_STATE.WIN;
         } else if (this.state !== COMBAT_STATE.LOSE) {
             this._startPlayerTurn();
         }
-
         return allEvents;
     }
-
     // ── Companion Turn ────────────────────────────────────────
-
     _processCompanionTurn() {
         const allEvents = [];
-
         for (const companion of this.companions) {
             if (!companion?.alive) continue;
-
             const { events } = companion.act(this.monsters, this.player);
-
             // Wrap companion damage events dengan element check
             const enriched = events.map(evt => {
                 if (evt.type === 'companion_damage' && evt.target) {
@@ -258,16 +258,12 @@ export class CombatSystem {
                 break;
             }
         }
-
         return allEvents;
     }
-
     // ── Card Resolution ───────────────────────────────────────
-
     _resolveCard(card, targetIdx) {
         const events = [];
         const target  = this.monsters[targetIdx] || this.monsters[0];
-
         // ── Curse Cards ───────────────────────────────────────
         if (card.isCurse) {
             if (card.curseEffect?.damage) {
@@ -295,7 +291,6 @@ export class CombatSystem {
                 events.push({ type: 'curse_benefit', benefit: 'damage_bonus', value: card.curseBenefit.damageBonus });
             }
         }
-
         if (card.sacrificeCard && this.player.hand.length > 0) {
             const idx = Math.floor(Math.random() * this.player.hand.length);
             const sacrificed = this.player.hand.splice(idx, 1)[0];
@@ -303,12 +298,10 @@ export class CombatSystem {
             this.player._nextCardFree = true;
             events.push({ type: 'sacrifice', cardName: sacrificed.name });
         }
-
         if (card.heal && !this.player._noHeal) {
             const healed = this.player.heal(card.heal);
             events.push({ type: 'heal', amount: healed });
         }
-
         if (card.lastStand) {
             const hpPct = (this.player.hp / this.player.stats['hp_max']) * 100;
             if (hpPct <= 20) {
@@ -318,12 +311,10 @@ export class CombatSystem {
                 events.push({ type: 'last_stand', heal: healAmt });
             }
         }
-
         if (card.drawCards) {
             DeckSystem.draw(this.player, card.drawCards);
             events.push({ type: 'draw', count: card.drawCards });
         }
-
         if (card.recycleHand) {
             const count = this.player.hand.length;
             DeckSystem.discardHand(this.player);
@@ -331,12 +322,10 @@ export class CombatSystem {
             DeckSystem.draw(this.player, drawCount);
             events.push({ type: 'recycle', count: drawCount });
         }
-
         if (card.stance) {
             this.player._stance = card.stance;
             events.push({ type: 'stance', stance: card.stance });
         }
-
         if (card.effects) {
             for (const eff of card.effects) {
                 switch (eff.type) {
@@ -380,41 +369,31 @@ export class CombatSystem {
             const enemyEvts = this._processEnemyTurn();
             return [...events, ...enemyEvts];
         }
-
         // ── Damage — dengan Element Multiplier ────────────────
         if ((card.damage || card.iaijutsu || card.desperateDmg) && (target || card.targetAll)) {
             const dmgTargets = card.targetAll
                 ? this.monsters.filter(m => !m.isDead)
                 : [target].filter(Boolean);
-
             // Elemen penyerang: dari weapon player atau dari card itu sendiri
             const attackerElement = card.element
                 || this.player.equipment?.weapon?.element
                 || null;
-
-            for (const t of dmgTargets) {
-                let dmg = card.damage || 0;
-
+            for (const t of dmgTargets) { let dmg = card.damage || 0;
                 if (card.strScaling) dmg += Math.floor((this.player.stats['str'] || 0) * 0.5);
                 if (card.intScaling) dmg += Math.floor((this.player.stats['int'] || 0) * 0.6);
                 if (card.agiScaling) dmg += Math.floor((this.player.stats['agi'] || 0) * 0.4);
-
                 if (card.burnBonus && t.hasStatus('burn')) dmg *= 2;
                 if (card.wetBonus  && t.hasStatus('wet'))  dmg *= 2;
-
                 if (card.desperateDmg) {
                     const missingHp = (this.player.stats['hp_max'] || 100) - this.player.hp;
                     dmg = (card.baseDamage || 5) + Math.floor(missingHp * (card.desperateMultiplier || 1));
                 }
-
                 if (card.iaijutsu) {
                     dmg = this.player.hand.length * (card.iaijutsuMultiplier || 4);
                 }
-
                 if (card.statusBonus && t.statusEffects.length > 0) {
                     dmg *= (card.statusMultiplier || 3);
                 }
-
                 if (card.executeThreshold && t.hpPercent * 100 <= card.executeThreshold) {
                     t.hp = 0;
                     events.push({ type: 'execute', target: t.id });
@@ -422,22 +401,17 @@ export class CombatSystem {
                     if (pr?.triggered) events.push({ type: 'phase_change', monsterId: t.id, announcement: pr.phase.announcement });
                     continue;
                 }
-
                 if (this.player._focusActive) {
                     dmg = Math.floor(dmg * (this.player._focusActive >= 2 ? 2 : 1.5));
                     this.player._focusActive = 0;
                 }
-
                 if (this.player._taikoPerCard && this.player._taikoCount > 0) {
                     dmg += this.player._taikoPerCard * this.player._taikoCount;
                 }
-
                 if (this.player._damageBonus) {
                     dmg = Math.floor(dmg * (1 + this.player._damageBonus / 100));
                 }
-
                 if (this.player._stance === 'attack') dmg = Math.floor(dmg * 1.3);
-
                 // Pet damage bonus
                 let petDmgMult = 1.0;
                 // +X% semua damage
@@ -461,7 +435,6 @@ export class CombatSystem {
                     if (atkElem === 'raijin') dmg += this.player._petWetRaijinBonus;
                 }
                 dmg = Math.floor(dmg * petDmgMult);
-
                 // ── Gogyō Element Multiplier ──────────────────
                 let elementMultiplier = 1.0;
                 let elementReaction   = 'neutral';
@@ -473,13 +446,11 @@ export class CombatSystem {
                     elementReaction   = result.reaction;
                 }
                 // ──────────────────────────────────────────────
-
                 const hits = card.hits || 1;
                 let totalDmg = 0;
                 for (let i = 0; i < hits; i++) {
                     totalDmg += t.takeDamage(dmg, card.damageType || 'physical');
                 }
-
                 const pr = t.checkPhaseTransition?.();
                 if (pr?.triggered) {
                     events.push({
@@ -487,7 +458,6 @@ export class CombatSystem {
                         phaseIndex: pr.phaseIndex, announcement: pr.phase.announcement,
                     });
                 }
-
                 events.push({
                     type:             'damage',
                     target:           t.id,
@@ -502,14 +472,12 @@ export class CombatSystem {
 
                 this._addLog(`${t.name} kena ${totalDmg} dmg. [${elementReaction}]`);
             }
-
             if (card.emptyHand) {
                 this.player.discard.push(...this.player.hand);
                 this.player.hand = [];
                 events.push({ type: 'empty_hand' });
             }
         }
-
         // ── Block ─────────────────────────────────────────────
         if (card.block) {
             let blockAmt = card.block;
@@ -525,7 +493,6 @@ export class CombatSystem {
             this.player._blockPersist = card.blockPersist || false;
             events.push({ type: 'block', amount: blockAmt });
         }
-
         // ── Status Effects ke musuh ───────────────────────────
         if (card.effects && target) {
             const skipTypes = ['haste', 'echo', 'focus', 'taiko', 'fortify', 'dodge'];
@@ -540,12 +507,10 @@ export class CombatSystem {
                 }
             }
         }
-
         if (card.catalyze && target) {
             for (const eff of target.statusEffects) eff.value = Math.floor(eff.value * 2);
             events.push({ type: 'catalyze', target: target.id });
         }
-
         if (card.reactDamage && this.player._lastDamageTaken && target) {
             const mult   = card.reactMultiplier || 2;
             const dmg    = this.player._lastDamageTaken * mult;
@@ -553,7 +518,6 @@ export class CombatSystem {
             events.push({ type: 'damage', target: target.id, amount: actual, hits: 1 });
             this.player._lastDamageTaken = 0;
         }
-
         if (card.burnCard && this.player.hand.length > 0) {
             const idx = Math.floor(Math.random() * this.player.hand.length);
             const burned = this.player.hand.splice(idx, 1)[0];
@@ -562,26 +526,20 @@ export class CombatSystem {
             this.player.discard.push(burned);
             events.push({ type: 'burn_card', cardName: burned.name, energy: gainEnergy });
         }
-
         if (this._allMonstersDead()) this.state = COMBAT_STATE.WIN;
 
         return events;
     }
-
     // ── Monster Action ────────────────────────────────────────
-
     _resolveMonsterAction(monster, action) {
         const events = [];
-
         if (action.type === 'stunned') {
             events.push({ type: 'monster_stunned', monsterId: monster.id });
             return events;
         }
-
         if (action.type === 'attack') {
             const dodgeStatus = this.player.statusEffects?.find(s => s.type === 'dodge');
             const dodgeChance = (this.player.stats[STAT.DODGE] || 0) + (dodgeStatus?.value || 0);
-
             if (Math.random() * 100 < dodgeChance) {
                 events.push({ type: 'dodge', target: 'player' });
                 if (this.player._stance === 'flow') {
@@ -590,18 +548,14 @@ export class CombatSystem {
                 }
                 return events;
             }
-
             let dmg = action.damage || 0;
-
             if (monster.hasStatus('chill')) {
                 const chill = monster.statusEffects.find(s => s.type === 'chill');
                 dmg = Math.floor(dmg * (1 - (chill.value / 100)));
             }
-
             if (this.player._stance === 'defend') {
                 dmg = Math.floor(dmg * 0.7);
             }
-
             const actual = this.player.takeDamage(dmg, action.damageType || 'physical');
             this.player._lastDamageTaken = actual;
             if (this.player.isDead && this.player._petFeniks) {
@@ -615,28 +569,25 @@ export class CombatSystem {
             }
             events.push({ type: 'damage', target: 'player', amount: actual, source: monster.id });
         }
-
         if (action.type === 'buff') {
             if (action.block) {
                 monster.addBlock(action.block);
                 events.push({ type: 'monster_block', monsterId: monster.id, amount: action.block });
             }
         }
-
         if (action.effects) {
             for (const eff of action.effects) {
                 this.player.addStatus(eff.type, eff.value, eff.duration);
                 events.push({ type: 'apply_status', target: 'player', status: eff.type, value: eff.value });
             }
         }
-
         return events;
     }
-
     // ── Status Tick ───────────────────────────────────────────
-
     _tickPlayerStatus() {
         for (const eff of [...(this.player.statusEffects || [])]) {
+
+            // Apply efek per-turn
             switch (eff.type) {
                 case 'burn':
                 case 'poison':
@@ -644,25 +595,36 @@ export class CombatSystem {
                 case 'curse_burn':
                     this.player.takeDamage(eff.value, DMG_TYPE.TRUE);
                     break;
+                // stun/freeze di player — akan dihandle di _startPlayerTurn
+                // tidak perlu damage, hanya penanda
             }
-            if (eff.type !== 'curse_burn' && eff.type !== 'curse_cost' &&
-                eff.type !== 'extra_draw' && eff.duration !== 999) {
+            // Decrement durasi
+            // Yang TIDAK di-decrement: duration 999 (permanen dalam combat)
+            // curse_cost dan extra_draw memang didesain permanen dalam combat
+            const isPermanentInCombat = (
+                eff.duration === 999 ||
+                eff.type === 'curse_cost' ||
+                eff.type === 'extra_draw'
+            );
+ 
+            if (!isPermanentInCombat) {
                 eff.duration--;
             }
         }
+        // Hapus yang sudah habis (duration <= 0), kecuali yang permanent
         this.player.statusEffects = (this.player.statusEffects || []).filter(s =>
-            s.duration === 999 || s.duration > 0
+            s.duration === 999 ||
+            s.type === 'curse_cost' ||
+            s.type === 'extra_draw' ||
+            s.duration > 0
         );
     }
-
     // ── Reset ─────────────────────────────────────────────────
-
     _resetAllTempBuffs() {
         this.player.statusEffects = (this.player.statusEffects || []).filter(s =>
             !['curse_burn', 'curse_cost', 'extra_draw', 'damage_bonus',
             'dodge', 'fortify', 'taiko', 'focus', 'echo'].includes(s.type)
         );
-    
         this.player._curseReduction  = 0;
         this.player._damageBonus     = 0;
         this.player._nextCardFree    = false;
@@ -683,13 +645,10 @@ export class CombatSystem {
         for (const c of this.companions) {
             if (c) c._turnCount = 0;
         }
-    
         // Reset pet flags ← BARU
         Pet.resetPetFlags(this.player);
     }
-
     // ── Helpers ───────────────────────────────────────────────
-
     _allMonstersDead() { return this.monsters.every(m => m.isDead); }
 
     _addLog(msg) {
